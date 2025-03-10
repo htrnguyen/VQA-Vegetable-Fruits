@@ -29,7 +29,7 @@ logger.addHandler(file_handler)
 
 # === Cấu hình API Keys ===
 API_KEYS_INFO = {
-    "AIzaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "Email 1",
+    "Your_API_KEY": "Your_Name",
 }
 
 API_KEYS = list(API_KEYS_INFO.keys())
