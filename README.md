@@ -34,25 +34,25 @@ pip install -r requirements.txt
 ### 1. Training với Pretrained CNN + Attention (Tối ưu cho Tesla T4)
 
 ```bash
-python scripts/train.py --use_attention --use_pretrained --embed_dim 512 --hidden_dim 1024 --visual_dim 1024 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0003 --data_dir data/processed --save_dir checkpoints --log_dir logs --clip_grad 5.0 --patience 5
+python scripts/train.py --use_attention --use_pretrained --embed_dim 512 --hidden_dim 1024 --visual_dim 1024 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0003 --data_dir data/processed --save_dir checkpoints/pretrained_attention --log_dir logs/pretrained_attention --clip_grad 5.0 --patience 5
 ```
 
 ### 2. Training với Pretrained CNN không có Attention (Tối ưu cho Tesla T4)
 
 ```bash
-python scripts/train.py --use_pretrained --embed_dim 512 --hidden_dim 1024 --visual_dim 1024 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0003 --data_dir data/processed --save_dir checkpoints --log_dir logs --clip_grad 5.0 --patience 5
+python scripts/train.py --use_pretrained --embed_dim 512 --hidden_dim 1024 --visual_dim 1024 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0003 --data_dir data/processed --save_dir checkpoints/pretrained_no_attention --log_dir logs/pretrained_no_attention --clip_grad 5.0 --patience 5
 ```
 
 ### 3. Training với Custom CNN từ đầu + Attention (Tối ưu cho Tesla T4)
 
 ```bash
-python scripts/train.py --use_attention --embed_dim 512 --hidden_dim 512 --visual_dim 512 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0005 --data_dir data/processed --save_dir checkpoints --log_dir logs --clip_grad 5.0 --patience 5
+python scripts/train.py --use_attention --embed_dim 512 --hidden_dim 512 --visual_dim 512 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0005 --data_dir data/processed --save_dir checkpoints/custom_attention --log_dir logs/custom_attention --clip_grad 5.0 --patience 5
 ```
 
 ### 4. Training với Custom CNN từ đầu không có Attention (Tối ưu cho Tesla T4)
 
 ```bash
-python scripts/train.py --embed_dim 512 --hidden_dim 512 --visual_dim 512 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0005 --data_dir data/processed --save_dir checkpoints --log_dir logs --clip_grad 5.0 --patience 5
+python scripts/train.py --embed_dim 512 --hidden_dim 512 --visual_dim 512 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0005 --data_dir data/processed --save_dir checkpoints/custom_no_attention --log_dir logs/custom_no_attention --clip_grad 5.0 --patience 5
 ```
 
 ## So Sánh Các Tiếp Cận
