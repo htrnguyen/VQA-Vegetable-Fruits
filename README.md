@@ -34,25 +34,25 @@ pip install -r requirements.txt
 ### 1. Training với Pretrained CNN + Attention (Tối ưu cho Tesla T4)
 
 ```bash
-python scripts/train.py --use_attention --use_pretrained --embed_dim 512 --hidden_dim 1024 --visual_dim 1024 --batch_size 32 --epochs 100 --device cuda --num_workers 8 --learning_rate 0.0003
+python scripts/train.py --use_attention --use_pretrained --embed_dim 512 --hidden_dim 1024 --visual_dim 1024 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0003 --data_dir data/processed --save_dir checkpoints --log_dir logs --clip_grad 5.0 --patience 5
 ```
 
 ### 2. Training với Pretrained CNN không có Attention (Tối ưu cho Tesla T4)
 
 ```bash
-python scripts/train.py --use_pretrained --embed_dim 512 --hidden_dim 1024 --visual_dim 1024 --batch_size 32 --epochs 100 --device cuda --num_workers 8 --learning_rate 0.0003
+python scripts/train.py --use_pretrained --embed_dim 512 --hidden_dim 1024 --visual_dim 1024 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0003 --data_dir data/processed --save_dir checkpoints --log_dir logs --clip_grad 5.0 --patience 5
 ```
 
 ### 3. Training với Custom CNN từ đầu + Attention (Tối ưu cho Tesla T4)
 
 ```bash
-python scripts/train.py --use_attention --use_pretrained False --embed_dim 512 --hidden_dim 512 --visual_dim 512 --batch_size 32 --epochs 100 --device cuda --num_workers 8 --learning_rate 0.0005
+python scripts/train.py --use_attention --embed_dim 512 --hidden_dim 512 --visual_dim 512 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0005 --data_dir data/processed --save_dir checkpoints --log_dir logs --clip_grad 5.0 --patience 5
 ```
 
 ### 4. Training với Custom CNN từ đầu không có Attention (Tối ưu cho Tesla T4)
 
 ```bash
-python scripts/train.py --use_pretrained False --embed_dim 512 --hidden_dim 512 --visual_dim 512 --batch_size 32 --epochs 100 --device cuda --num_workers 8 --learning_rate 0.0005
+python scripts/train.py --embed_dim 512 --hidden_dim 512 --visual_dim 512 --batch_size 32 --epochs 100 --device cuda --num_workers 4 --lr 0.0005 --data_dir data/processed --save_dir checkpoints --log_dir logs --clip_grad 5.0 --patience 5
 ```
 
 ## So Sánh Các Tiếp Cận
@@ -118,23 +118,23 @@ python scripts/inference.py --model_path checkpoints/best_model.pth --image_path
 
 ### Tham Số Model (Tối ưu cho GPU)
 
-- `--use_attention`: Bật/tắt cơ chế attention (True/False)
-- `--use_pretrained`: Sử dụng pretrained CNN hoặc train từ đầu (True/False)
+- `--use_attention`: Bật/tắt cơ chế attention (flag)
+- `--use_pretrained`: Sử dụng pretrained CNN (flag)
 - `--embed_dim`: Kích thước word embeddings (mặc định: 512 cho GPU)
 - `--hidden_dim`: Kích thước LSTM hidden state (mặc định: 512-1024 cho GPU)
 - `--visual_dim`: Kích thước visual features (mặc định: 512-1024 cho GPU)
-- `--num_layers`: Số lớp LSTM (mặc định: 2 cho GPU)
+- `--num_layers`: Số lớp LSTM (mặc định: 1)
+- `--dropout`: Tỷ lệ dropout (mặc định: 0.5)
 
 ### Tham Số Training (Tối ưu cho GPU)
 
-- `--batch_size`: Kích thước batch (mặc định: 32-64 cho Tesla T4)
-- `--epochs`: Số epochs training (mặc định: 100-150 cho GPU)
-- `--learning_rate`: Tốc độ học (mặc định: 0.0003-0.0005 cho GPU)
+- `--batch_size`: Kích thước batch (mặc định: 32 cho Tesla T4)
+- `--epochs`: Số epochs training (mặc định: 100)
+- `--lr`: Learning rate (mặc định: 0.0003-0.0005)
 - `--device`: Thiết bị chạy (cuda/cpu, mặc định: cuda nếu có)
-- `--num_workers`: Số worker cho DataLoader (mặc định: 8 cho GPU)
-- `--gradient_clip`: Giới hạn gradient (mặc định: 1.0)
-- `--warmup_steps`: Số bước warmup (mặc định: 1000)
-- `--weight_decay`: L2 regularization (mặc định: 0.0001)
+- `--num_workers`: Số worker cho DataLoader (mặc định: 4)
+- `--clip_grad`: Giới hạn gradient (mặc định: 5.0)
+- `--patience`: Số epochs chờ early stopping (mặc định: 5)
 
 ### Tham Số Inference
 
@@ -143,9 +143,6 @@ python scripts/inference.py --model_path checkpoints/best_model.pth --image_path
 
 ### Tham Số Đường Dẫn
 
-- `--model_path`: Đường dẫn đến model checkpoint
-- `--image_path`: Đường dẫn đến hình ảnh cần phân tích
-- `--vocab_path`: Đường dẫn đến file từ điển
-- `--train_data`: Đường dẫn đến dữ liệu training
-- `--test_data`: Đường dẫn đến dữ liệu test
-- `--image_dir`: Thư mục chứa hình ảnh
+- `--data_dir`: Thư mục chứa dữ liệu đã xử lý
+- `--save_dir`: Thư mục lưu checkpoints
+- `--log_dir`: Thư mục lưu logs
