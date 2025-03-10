@@ -29,20 +29,7 @@ logger.addHandler(file_handler)
 
 # === Cấu hình API Keys ===
 API_KEYS_INFO = {
-    "AIzaSyCLkZQmuTLXRRTAkz4GNGFCgywbXt_wf6I": "Email 1",
-    "AIzaSyDEgXyz7CFRLenfQRGqtSKU_lmqqeEa0gI": "Email 2",
-    "AIzaSyChW-temSy4majO1iOKyfRZxEVE55tFGVU": "Email 3",
-    "AIzaSyAG-JTDBhBjGjIQRhbAA7qinimG-MFZBLw": "Email 4",
-    "AIzaSyBEIzqoukZX4bvf2l4mJvR41S0LIr5PUTk": "Email 5",
-    "AIzaSyB5X3IrxXYkEKnfcpftFSu-ILfZq-lpqeo": "Email 6 - CT",
-    "AIzaSyAI8cCuWhMVOJwFDB_8Z884osX8guVvB4w": "Email 7 - MT",
-    "AIzaSyC0H_rgV2jbNiiPdvxEfy6rMIgbFW-NsoI": "Email 8 - MT",
-    "AIzaSyD3MfFixZP9NYsiBZ5BMRWANtPR71GQLME": "Email 9 - MT",
-    "AIzaSyAlfwuWZO6u8JO5_EZsE2dtAtg2KIdLZQw": "Email 10 - MT",
-    "AIzaSyAwYPL9pEsQOzvKmZiHa2qk3QZZgNkNokQ": "Email 11 - KT",
-    "AIzaSyA7w3_6vGJ5aBlPmzJLoXN7ATG8SJJkjy4": "Email 12 - KT",
-    "AIzaSyCBS4jvnwHKbNHCoA81fIiRN3L89BHLlAk": "Email 13 - KT",
-    "AIzaSyDnQAL0Zqm4ALJfr8efL2v144PRBcFqoPM": "Email 14 - KT",
+    "AIzaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "Email 1",
 }
 
 API_KEYS = list(API_KEYS_INFO.keys())
