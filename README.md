@@ -102,17 +102,52 @@ python scripts/train.py --embed_dim 512 --hidden_dim 512 --visual_dim 512 --batc
     - Độ chính xác thấp hơn
     - Khó giải thích quyết định
 
-## Đánh Giá
+## Đánh Giá và Kiểm Thử
+
+### 1. Đánh Giá Model
 
 ```bash
-python scripts/evaluate.py --model_path checkpoints/best_model.pth --test_data data/processed/test.json --vocab_path data/processed/vocab.json --batch_size 32 --device cuda
+# Đánh giá Pretrained CNN + Attention
+python scripts/evaluate.py --model_path checkpoints/pretrained_attention/model_best.pth --test_data data/processed/test.json --vocab_path data/processed/vocab.json --batch_size 32 --device cuda --output_file logs/pretrained_attention/eval_results.json
+
+# Đánh giá Pretrained CNN không có Attention
+python scripts/evaluate.py --model_path checkpoints/pretrained_no_attention/model_best.pth --test_data data/processed/test.json --vocab_path data/processed/vocab.json --batch_size 32 --device cuda --output_file logs/pretrained_no_attention/eval_results.json
+
+# Đánh giá Custom CNN + Attention
+python scripts/evaluate.py --model_path checkpoints/custom_attention/model_best.pth --test_data data/processed/test.json --vocab_path data/processed/vocab.json --batch_size 32 --device cuda --output_file logs/custom_attention/eval_results.json
+
+# Đánh giá Custom CNN không có Attention
+python scripts/evaluate.py --model_path checkpoints/custom_no_attention/model_best.pth --test_data data/processed/test.json --vocab_path data/processed/vocab.json --batch_size 32 --device cuda --output_file logs/custom_no_attention/eval_results.json
 ```
 
-## Inference
+### 2. Kiểm Thử Model
 
 ```bash
-python scripts/inference.py --model_path checkpoints/best_model.pth --image_path data/test_images/fruit.jpg --question "What fruits are in the image?" --vocab_path data/processed/vocab.json --device cuda
+# Kiểm thử Pretrained CNN + Attention
+python scripts/inference.py --model_path checkpoints/pretrained_attention/model_best.pth --image_path data/test_images/fruit.jpg --question "What fruits are in the image?" --vocab_path data/processed/vocab.json --device cuda --output_file logs/pretrained_attention/test_results.json
+
+# Kiểm thử Pretrained CNN không có Attention
+python scripts/inference.py --model_path checkpoints/pretrained_no_attention/model_best.pth --image_path data/test_images/fruit.jpg --question "What fruits are in the image?" --vocab_path data/processed/vocab.json --device cuda --output_file logs/pretrained_no_attention/test_results.json
+
+# Kiểm thử Custom CNN + Attention
+python scripts/inference.py --model_path checkpoints/custom_attention/model_best.pth --image_path data/test_images/fruit.jpg --question "What fruits are in the image?" --vocab_path data/processed/vocab.json --device cuda --output_file logs/custom_attention/test_results.json
+
+# Kiểm thử Custom CNN không có Attention
+python scripts/inference.py --model_path checkpoints/custom_no_attention/model_best.pth --image_path data/test_images/fruit.jpg --question "What fruits are in the image?" --vocab_path data/processed/vocab.json --device cuda --output_file logs/custom_no_attention/test_results.json
 ```
+
+### Tham Số Đánh Giá và Kiểm Thử
+
+- `--model_path`: Đường dẫn đến file checkpoint của model
+- `--test_data`: File dữ liệu test (JSON)
+- `--vocab_path`: File từ điển (JSON)
+- `--batch_size`: Kích thước batch cho đánh giá (mặc định: 32)
+- `--device`: Thiết bị chạy (cuda/cpu)
+- `--output_file`: File lưu kết quả đánh giá/kiểm thử
+- `--image_path`: Đường dẫn ảnh cho kiểm thử
+- `--question`: Câu hỏi cho kiểm thử
+- `--max_length`: Độ dài tối đa câu trả lời (mặc định: 20)
+- `--temperature`: Nhiệt độ cho việc sinh câu trả lời (mặc định: 1.0)
 
 ## Tham Số Chi Tiết
 
