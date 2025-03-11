@@ -102,11 +102,14 @@ def main():
     logger = setup_logging(args.log_dir)
     logger.info(f"Arguments: {args}")
 
-    # Create save directory
-    save_dir = os.path.join(
-        args.save_dir, f"vqa_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    )
+    # Create save directory with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_dir = os.path.join(args.save_dir, f"vqa_{timestamp}")
     os.makedirs(save_dir, exist_ok=True)
+
+    # Save config
+    with open(os.path.join(save_dir, "config.json"), "w") as f:
+        json.dump(vars(args), f, indent=2)
 
     # Setup device
     device = torch.device(args.device)
@@ -164,6 +167,9 @@ def main():
     logger.info("Starting training...")
     best_bleu = 0
     patience_counter = 0
+    best_checkpoint_path = os.path.join(save_dir, "best_model.pth")
+    metrics_path = os.path.join(save_dir, "metrics.json")
+    metrics_history = []
 
     for epoch in range(args.epochs):
         logger.info(f"\nEpoch {epoch+1}/{args.epochs}")
@@ -191,24 +197,27 @@ def main():
         # Update learning rate
         scheduler.step(val_metrics["bleu1"])
 
+        # Save metrics history
+        epoch_metrics = {
+            "epoch": epoch + 1,
+            "train": train_metrics,
+            "val": val_metrics,
+            "lr": optimizer.param_groups[0]["lr"],
+        }
+        metrics_history.append(epoch_metrics)
+
+        # Save metrics history to file
+        with open(metrics_path, "w") as f:
+            json.dump(metrics_history, f, indent=2)
+
         # Save checkpoint if best model
         if val_metrics["bleu1"] > best_bleu:
             best_bleu = val_metrics["bleu1"]
             patience_counter = 0
 
             # Save model
-            checkpoint_path = os.path.join(save_dir, f"model_best.pth")
-            model.save_checkpoint(checkpoint_path)
-            logger.info(f"Saved best model to {checkpoint_path}")
-
-            # Save training info
-            save_training_info(
-                save_dir=save_dir,
-                epoch=epoch + 1,
-                train_metrics=train_metrics,
-                val_metrics=val_metrics,
-                model_config=vars(args),
-            )
+            model.save_checkpoint(best_checkpoint_path)
+            logger.info(f"Saved best model (BLEU-1: {best_bleu:.4f})")
         else:
             patience_counter += 1
 
@@ -219,6 +228,7 @@ def main():
 
     logger.info("Training completed!")
     logger.info(f"Best validation BLEU-1: {best_bleu:.4f}")
+    logger.info(f"Model saved at: {save_dir}")
 
 
 if __name__ == "__main__":

@@ -234,10 +234,20 @@ def save_training_info(
     """Lưu thông tin training"""
     os.makedirs(save_dir, exist_ok=True)
 
+    # Convert tensors to Python types
+    def convert_tensors(metrics: Dict) -> Dict:
+        converted = {}
+        for k, v in metrics.items():
+            if isinstance(v, torch.Tensor):
+                converted[k] = v.item()
+            else:
+                converted[k] = v
+        return converted
+
     info = {
         "epoch": epoch,
-        "train_metrics": train_metrics,
-        "val_metrics": val_metrics,
+        "train_metrics": convert_tensors(train_metrics),
+        "val_metrics": convert_tensors(val_metrics),
         "model_config": model_config,
     }
 
