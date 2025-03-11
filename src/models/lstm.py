@@ -10,7 +10,7 @@ class Attention(nn.Module):
     def __init__(self, hidden_dim: int, spatial_dim: int):
         """
         Args:
-            hidden_dim: Số chiều của hidden state LSTM
+            hidden_dim: Số chiều của hidden state LSTM (đã nhân 2 nếu bidirectional)
             spatial_dim: Số chiều của spatial features từ CNN
         """
         super(Attention, self).__init__()
@@ -124,7 +124,7 @@ class LSTMDecoder(nn.Module):
 
         # Output layer
         self.output_layer = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim * 2, hidden_dim),  # *2 vì bidirectional
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_dim, vocab_size),
@@ -164,6 +164,10 @@ class LSTMDecoder(nn.Module):
                 else:
                     h_t = hidden[0][-1]
 
+                # Nối forward và backward hidden states
+                if isinstance(h_t, tuple):
+                    h_t = torch.cat([h_t[0], h_t[1]], dim=-1)
+
                 context, attn = self.attention(h_t, visual_features)
                 context_vectors.append(context)
                 attention_list.append(attn)
@@ -197,7 +201,7 @@ class LSTMDecoder(nn.Module):
         lstm_input = torch.cat([decoder_input, context], dim=2)
 
         # LSTM forward
-        # lstm_out: [batch_size, max_answer_length, hidden_dim]
+        # lstm_out: [batch_size, max_answer_length, hidden_dim*2]
         lstm_out, _ = self.lstm(lstm_input, hidden)
 
         # Output layer
@@ -210,6 +214,7 @@ class LSTMDecoder(nn.Module):
         self, batch_size: int, device: torch.device
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Khởi tạo hidden state và cell state cho LSTM"""
-        h_0 = torch.zeros(self.num_layers, batch_size, self.hidden_dim).to(device)
-        c_0 = torch.zeros(self.num_layers, batch_size, self.hidden_dim).to(device)
+        # *2 vì bidirectional
+        h_0 = torch.zeros(self.num_layers * 2, batch_size, self.hidden_dim).to(device)
+        c_0 = torch.zeros(self.num_layers * 2, batch_size, self.hidden_dim).to(device)
         return (h_0, c_0)
