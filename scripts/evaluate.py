@@ -1,8 +1,13 @@
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+# Thêm thư mục gốc vào Python path
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(PROJECT_ROOT)
 
 import matplotlib.pyplot as plt
 import numpy as np
