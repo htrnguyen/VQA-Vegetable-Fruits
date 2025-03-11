@@ -96,6 +96,8 @@ class LSTMDecoder(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.use_attention = use_attention
+        self.visual_dim = visual_dim
+        self.dropout_rate = dropout
 
         # Word embedding layer
         self.embedding = nn.Embedding(vocab_size, embed_dim)
@@ -108,11 +110,17 @@ class LSTMDecoder(nn.Module):
             num_layers=num_layers,
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0,
+            bidirectional=True,
         )
 
         # Attention module
         if use_attention:
-            self.attention = Attention(hidden_dim, visual_dim)
+            self.attention = Attention(
+                hidden_dim * 2, visual_dim
+            )  # *2 vì bidirectional
+
+        # Dropout layer
+        self.dropout = nn.Dropout(dropout)
 
         # Output layer
         self.output_layer = nn.Sequential(

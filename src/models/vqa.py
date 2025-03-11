@@ -163,10 +163,8 @@ class VQAModel(nn.Module):
                 "visual_dim": self.lstm.visual_dim,
                 "num_layers": self.lstm.num_layers,
                 "use_attention": self.use_attention,
-                "use_pretrained": True,  # Lưu lại để load đúng model
-                "dropout": (
-                    self.lstm.dropout.p if hasattr(self.lstm, "dropout") else 0.5
-                ),
+                "use_pretrained": True,
+                "dropout": self.lstm.dropout_rate,
             },
         }
         torch.save(checkpoint, path)
