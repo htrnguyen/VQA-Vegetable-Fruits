@@ -94,6 +94,17 @@ def parse_args():
     return parser.parse_args()
 
 
+def convert_tensor_metrics(metrics):
+    """Convert tensor metrics to Python types"""
+    converted = {}
+    for k, v in metrics.items():
+        if isinstance(v, torch.Tensor):
+            converted[k] = v.item()
+        else:
+            converted[k] = v
+    return converted
+
+
 def main():
     # Parse arguments
     args = parse_args()
@@ -200,8 +211,8 @@ def main():
         # Save metrics history
         epoch_metrics = {
             "epoch": epoch + 1,
-            "train": train_metrics,
-            "val": val_metrics,
+            "train": convert_tensor_metrics(train_metrics),
+            "val": convert_tensor_metrics(val_metrics),
             "lr": optimizer.param_groups[0]["lr"],
         }
         metrics_history.append(epoch_metrics)
