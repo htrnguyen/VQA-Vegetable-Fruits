@@ -15,11 +15,15 @@ class Attention(nn.Module):
         """
         super(Attention, self).__init__()
 
+        # Project hidden state và spatial features xuống cùng không gian
+        self.hidden_proj = nn.Linear(hidden_dim, hidden_dim // 2)
+        self.spatial_proj = nn.Linear(spatial_dim, hidden_dim // 2)
+
         # Layer để tính attention scores
         self.attention_layer = nn.Sequential(
-            nn.Linear(hidden_dim + spatial_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim // 2),
             nn.Tanh(),
-            nn.Linear(hidden_dim, 1),
+            nn.Linear(hidden_dim // 2, 1),
         )
 
     def forward(
@@ -36,17 +40,23 @@ class Attention(nn.Module):
         batch_size = hidden.size(0)
         h, w = spatial_features.size(2), spatial_features.size(3)
 
-        # Reshape spatial features
+        # Project hidden state
+        # [batch_size, hidden_dim] -> [batch_size, hidden_dim//2]
+        hidden_proj = self.hidden_proj(hidden)
+
+        # Reshape và project spatial features
         # [batch_size, spatial_dim, h, w] -> [batch_size, h*w, spatial_dim]
         spatial_features = spatial_features.view(batch_size, -1, h * w).permute(0, 2, 1)
+        # [batch_size, h*w, spatial_dim] -> [batch_size, h*w, hidden_dim//2]
+        spatial_proj = self.spatial_proj(spatial_features)
 
         # Expand hidden state
-        # [batch_size, hidden_dim] -> [batch_size, h*w, hidden_dim]
-        hidden_expanded = hidden.unsqueeze(1).expand(-1, h * w, -1)
+        # [batch_size, hidden_dim//2] -> [batch_size, h*w, hidden_dim//2]
+        hidden_expanded = hidden_proj.unsqueeze(1).expand(-1, h * w, -1)
 
-        # Concatenate và tính attention scores
-        # [batch_size, h*w, hidden_dim + spatial_dim]
-        features = torch.cat([hidden_expanded, spatial_features], dim=2)
+        # Concatenate projected features
+        # [batch_size, h*w, hidden_dim]
+        features = torch.cat([hidden_expanded, spatial_proj], dim=2)
 
         # Tính attention scores
         # [batch_size, h*w, 1]
@@ -150,24 +160,22 @@ class LSTMDecoder(nn.Module):
         # [batch_size, seq_len] -> [batch_size, seq_len, embed_dim]
         embedded = self.embedding(questions)
 
-        # Khởi tạo attention weights
+        # Khởi tạo attention weights và hidden states
         attention_weights = None
+        if hidden is None:
+            hidden = self.init_hidden(batch_size, questions.device)
 
         if self.use_attention:
             # Tính attention và context vector cho mỗi time step
             context_vectors = []
             attention_list = []
 
+            # Lấy hidden states từ LSTM
+            h_t = torch.cat(
+                [hidden[0][0], hidden[0][1]], dim=1
+            )  # [batch_size, hidden_dim*2]
+
             for t in range(max_answer_length):
-                if hidden is None:
-                    h_t = self.init_hidden(batch_size, questions.device)[0][-1]
-                else:
-                    h_t = hidden[0][-1]
-
-                # Nối forward và backward hidden states
-                if isinstance(h_t, tuple):
-                    h_t = torch.cat([h_t[0], h_t[1]], dim=-1)
-
                 context, attn = self.attention(h_t, visual_features)
                 context_vectors.append(context)
                 attention_list.append(attn)
