@@ -1,93 +1,23 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
 
-
-class Attention(nn.Module):
-    """Attention module cho LSTM Decoder"""
-
-    def __init__(self, hidden_dim: int, spatial_dim: int):
-        """
-        Args:
-            hidden_dim: Số chiều của hidden state LSTM (đã nhân 2 nếu bidirectional)
-            spatial_dim: Số chiều của spatial features từ CNN
-        """
-        super(Attention, self).__init__()
-
-        # Project hidden state và spatial features xuống cùng không gian
-        self.hidden_proj = nn.Linear(hidden_dim, hidden_dim // 2)
-        self.spatial_proj = nn.Linear(spatial_dim, hidden_dim // 2)
-
-        # Layer để tính attention scores
-        self.attention_layer = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.Tanh(),
-            nn.Linear(hidden_dim // 2, 1),
-        )
-
-    def forward(
-        self,
-        hidden: torch.Tensor,  # [batch_size, hidden_dim]
-        spatial_features: torch.Tensor,  # [batch_size, spatial_dim, h, w]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Tính attention và context vector
-        Returns:
-            context: Context vector sau khi attend [batch_size, spatial_dim]
-            attention_weights: Attention weights [batch_size, h*w]
-        """
-        batch_size = hidden.size(0)
-        h, w = spatial_features.size(2), spatial_features.size(3)
-
-        # Project hidden state
-        # [batch_size, hidden_dim] -> [batch_size, hidden_dim//2]
-        hidden_proj = self.hidden_proj(hidden)
-
-        # Reshape và project spatial features
-        # [batch_size, spatial_dim, h, w] -> [batch_size, h*w, spatial_dim]
-        spatial_features = spatial_features.view(batch_size, -1, h * w).permute(0, 2, 1)
-        # [batch_size, h*w, spatial_dim] -> [batch_size, h*w, hidden_dim//2]
-        spatial_proj = self.spatial_proj(spatial_features)
-
-        # Expand hidden state
-        # [batch_size, hidden_dim//2] -> [batch_size, h*w, hidden_dim//2]
-        hidden_expanded = hidden_proj.unsqueeze(1).expand(-1, h * w, -1)
-
-        # Concatenate projected features
-        # [batch_size, h*w, hidden_dim]
-        features = torch.cat([hidden_expanded, spatial_proj], dim=2)
-
-        # Tính attention scores
-        # [batch_size, h*w, 1]
-        attention_weights = self.attention_layer(features)
-        attention_weights = attention_weights.squeeze(2)  # [batch_size, h*w]
-
-        # Áp dụng softmax để có weights tổng = 1
-        attention_weights = F.softmax(attention_weights, dim=1)
-
-        # Tính context vector
-        # [batch_size, spatial_dim]
-        context = torch.bmm(
-            attention_weights.unsqueeze(1),  # [batch_size, 1, h*w]
-            spatial_features,  # [batch_size, h*w, spatial_dim]
-        ).squeeze(1)
-
-        return context, attention_weights
+from .attention import VisualQuestionAttention
 
 
 class LSTMDecoder(nn.Module):
-    """LSTM Decoder cho bài toán VQA"""
+    """LSTM Decoder cho bài toán VQA với attention tùy chọn"""
 
     def __init__(
         self,
         vocab_size: int,
         embed_dim: int = 300,
-        hidden_dim: int = 512,
-        num_layers: int = 1,
-        visual_dim: int = 512,
-        use_attention: bool = False,
+        hidden_dim: int = 1024,
+        visual_dim: int = 2048,
+        num_layers: int = 2,
         dropout: float = 0.5,
+        use_attention: bool = False,
     ):
         """
         Args:
@@ -95,27 +25,27 @@ class LSTMDecoder(nn.Module):
             embed_dim: Số chiều của word embeddings
             hidden_dim: Số chiều của LSTM hidden state
             num_layers: Số lớp LSTM
-            visual_dim: Số chiều của visual features từ CNN
+            visual_dim: Số chiều của visual features
             use_attention: Có sử dụng attention không
             dropout: Tỷ lệ dropout
         """
-        super(LSTMDecoder, self).__init__()
+        super().__init__()
 
         self.vocab_size = vocab_size
         self.embed_dim = embed_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
-        self.use_attention = use_attention
         self.visual_dim = visual_dim
+        self.use_attention = use_attention
         self.dropout_rate = dropout
 
-        # Word embedding layer
+        # Word embedding layer với positional encoding
         self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.pos_encoder = PositionalEncoding(embed_dim, dropout)
 
-        # LSTM layer
-        lstm_input_dim = embed_dim + visual_dim
-        self.lstm = nn.LSTM(
-            input_size=lstm_input_dim,
+        # Question encoder (LSTM)
+        self.question_encoder = nn.LSTM(
+            input_size=embed_dim,
             hidden_size=hidden_dim,
             num_layers=num_layers,
             batch_first=True,
@@ -123,18 +53,23 @@ class LSTMDecoder(nn.Module):
             bidirectional=True,
         )
 
-        # Attention module
+        # Visual-Question Attention
         if use_attention:
-            self.attention = Attention(
-                hidden_dim * 2, visual_dim
-            )  # *2 vì bidirectional
+            self.attention = VisualQuestionAttention(
+                visual_dim=visual_dim,
+                question_dim=hidden_dim * 2,
+            )
 
-        # Dropout layer
-        self.dropout = nn.Dropout(dropout)
+        # Fusion layer
+        fusion_dim = hidden_dim * 2
+        if use_attention:
+            fusion_dim += hidden_dim  # Add attention context dimension
+        else:
+            fusion_dim += visual_dim  # Add visual feature dimension
 
-        # Output layer
+        # Output layers với residual connections
         self.output_layer = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim),  # *2 vì bidirectional
+            nn.Linear(fusion_dim, hidden_dim),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_dim, vocab_size),
@@ -145,84 +80,109 @@ class LSTMDecoder(nn.Module):
         questions: torch.Tensor,  # [batch_size, seq_len]
         visual_features: torch.Tensor,  # [batch_size, visual_dim, h, w] hoặc [batch_size, visual_dim]
         hidden: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Dict[str, torch.Tensor]:
         """
         Forward pass của decoder
         Returns:
-            outputs: Logits cho mỗi từ [batch_size, max_answer_length, vocab_size]
-            attention_weights: Attention weights nếu use_attention=True,
-                            None nếu ngược lại
+            Dict chứa:
+            - logits: Logits cho mỗi từ [batch_size, vocab_size]
+            - attention_weights: Attention weights nếu use_attention=True
         """
         batch_size = questions.size(0)
-        max_answer_length = 5  # Độ dài tối đa của câu trả lời
 
-        # Embed câu hỏi
+        # Embed và encode position cho câu hỏi
         # [batch_size, seq_len] -> [batch_size, seq_len, embed_dim]
         embedded = self.embedding(questions)
+        embedded = self.pos_encoder(embedded)
 
-        # Khởi tạo attention weights và hidden states
+        # Question encoding
+        # [batch_size, seq_len, hidden_dim * 2] nếu bidirectional
+        question_out, (h_n, c_n) = self.question_encoder(embedded, hidden)
+
+        # Get final question representation
+        question_repr = torch.cat([h_n[-2], h_n[-1]], dim=1)
+
         attention_weights = None
-        if hidden is None:
-            hidden = self.init_hidden(batch_size, questions.device)
-
         if self.use_attention:
-            # Tính attention và context vector cho mỗi time step
-            context_vectors = []
-            attention_list = []
-
-            # Lấy hidden states từ LSTM
-            h_t = torch.cat(
-                [hidden[0][0], hidden[0][1]], dim=1
-            )  # [batch_size, hidden_dim*2]
-
-            for t in range(max_answer_length):
-                context, attn = self.attention(h_t, visual_features)
-                context_vectors.append(context)
-                attention_list.append(attn)
-
-            # Stack context vectors và attention weights
-            context = torch.stack(
-                context_vectors, dim=1
-            )  # [batch_size, max_answer_length, visual_dim]
-            attention_weights = torch.stack(
-                attention_list, dim=1
-            )  # [batch_size, max_answer_length, h*w]
-        else:
-            # Nếu không dùng attention, lấy global visual features
+            # Reshape visual features nếu cần
             if len(visual_features.size()) == 4:
-                context = torch.mean(visual_features, dim=[2, 3])
-            else:
-                context = visual_features
-            # Expand context để match với sequence length
-            context = context.unsqueeze(1).expand(
-                -1, max_answer_length, -1
-            )  # [batch_size, max_answer_length, visual_dim]
+                b, c, h, w = visual_features.size()
+                visual_features = visual_features.view(b, c, -1).permute(0, 2, 1)
 
-        # Lấy embedding của câu hỏi cuối cùng làm initial input
-        # [batch_size, embed_dim]
-        decoder_input = embedded[:, -1, :]
-        # Expand để match với sequence length
-        decoder_input = decoder_input.unsqueeze(1).expand(-1, max_answer_length, -1)
+            # Apply attention
+            context, attention_weights = self.attention(
+                visual_features=visual_features, question_features=question_repr
+            )
 
-        # Concatenate word embeddings và context vectors
-        # [batch_size, max_answer_length, embed_dim + visual_dim]
-        lstm_input = torch.cat([decoder_input, context], dim=2)
+            # Pool attention context
+            context = torch.mean(context, dim=1)  # [batch_size, hidden_dim]
 
-        # LSTM forward
-        # lstm_out: [batch_size, max_answer_length, hidden_dim*2]
-        lstm_out, _ = self.lstm(lstm_input, hidden)
+            # Concatenate với question representation
+            combined = torch.cat([question_repr, context], dim=1)
+        else:
+            # Global average pooling cho visual features nếu cần
+            if len(visual_features.size()) == 4:
+                visual_features = torch.mean(visual_features, dim=[2, 3])
 
-        # Output layer
-        # [batch_size, max_answer_length, vocab_size]
-        outputs = self.output_layer(lstm_out)
+            # Concatenate question và visual features
+            combined = torch.cat([question_repr, visual_features], dim=1)
 
-        return outputs, attention_weights
+        # Generate output logits
+        logits = self.output_layer(combined)
+
+        return {"logits": logits, "attention_weights": attention_weights}
 
     def init_hidden(
         self, batch_size: int, device: torch.device
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Khởi tạo hidden state và cell state cho LSTM"""
-        # *2 vì bidirectional
-        h_0 = torch.zeros(self.num_layers * 2, batch_size, self.hidden_dim).to(device)
-        c_0 = torch.zeros(self.num_layers * 2, batch_size, self.hidden_dim).to(device)
+        num_directions = 2
+        h_0 = torch.zeros(
+            self.num_layers * num_directions, batch_size, self.hidden_dim
+        ).to(device)
+        c_0 = torch.zeros(
+            self.num_layers * num_directions, batch_size, self.hidden_dim
+        ).to(device)
         return (h_0, c_0)
+
+
+class PositionalEncoding(nn.Module):
+    """Positional encoding cho sequence"""
+
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 100):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2) * (-torch.log(torch.tensor(10000.0)) / d_model)
+        )
+        pe = torch.zeros(1, max_len, d_model)
+        pe[0, :, 0::2] = torch.sin(position * div_term)
+        pe[0, :, 1::2] = torch.cos(position * div_term)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Tensor shape [batch_size, seq_len, embedding_dim]
+        """
+        x = x + self.pe[:, : x.size(1)]
+        return self.dropout(x)
+
+
+class ResidualBlock(nn.Module):
+    """Residual block với layer normalization"""
+
+    def __init__(self, hidden_dim: int, dropout: float = 0.1):
+        super().__init__()
+        self.layer = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, hidden_dim),
+        )
+        self.norm = nn.LayerNorm(hidden_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.norm(x + self.layer(x))

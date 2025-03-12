@@ -16,7 +16,6 @@ class VQADataset(Dataset):
         self,
         data_dir: str,
         split: str,
-        vocab_path: str,
         transform: Optional[transforms.Compose] = None,
         max_question_length: int = 20,
         max_answer_length: int = 5,
@@ -26,60 +25,18 @@ class VQADataset(Dataset):
         Args:
             data_dir: Thư mục chứa dữ liệu
             split: 'train', 'val' hoặc 'test'
-            vocab_path: Đường dẫn đến file vocabulary
             transform: Các transform để áp dụng lên ảnh
             max_question_length: Độ dài tối đa của câu hỏi
             max_answer_length: Độ dài tối đa của câu trả lời
         """
-        self.data_dir = data_dir
-        self.split = split
+        # Load samples
+        samples_path = os.path.join(data_dir, split, "samples.json")
+        with open(samples_path, "r", encoding="utf-8") as f:
+            self.samples = json.load(f)
+
+        self.transform = transform
         self.max_question_length = max_question_length
         self.max_answer_length = max_answer_length
-
-        # Load vocabulary
-        with open(vocab_path, "r", encoding="utf-8") as f:
-            vocab = json.load(f)
-            self.word2idx = vocab["word2idx"]
-            self.idx2word = {int(k): v for k, v in vocab["idx2word"].items()}
-            self.vocab_size = len(self.word2idx)
-
-        # Load dataset split
-        data_path = os.path.join(data_dir, f"{split}.json")
-        with open(data_path, "r", encoding="utf-8") as f:
-            self.data = json.load(f)
-
-        # Chuẩn bị transforms
-        if transform is None:
-            self.transform = transforms.Compose(
-                [
-                    transforms.Resize((224, 224)),
-                    transforms.ToTensor(),
-                    transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                    ),
-                ]
-            )
-        else:
-            self.transform = transform
-
-        # Tạo danh sách các cặp (ảnh, câu hỏi, câu trả lời)
-        self.samples = []
-        for item in self.data:
-            # Xử lý đường dẫn ảnh: loại bỏ 'data/processed/' nếu có
-            image_path = item["image_id"]
-            if image_path.startswith("data/processed/"):
-                image_path = image_path[len("data/processed/") :]
-            image_path = os.path.join(data_dir, image_path)
-
-            for qa in item["questions"]:
-                self.samples.append(
-                    {
-                        "image_path": image_path,
-                        "question": qa["question"],
-                        "answer": qa["answer"],
-                        "type": qa["type"],
-                    }
-                )
 
     def __len__(self) -> int:
         """Trả về số lượng mẫu trong dataset"""
@@ -98,52 +55,32 @@ class VQADataset(Dataset):
         """
         sample = self.samples[idx]
 
-        # Load và xử lý ảnh
-        image = Image.open(sample["image_path"]).convert("RGB")
-        image = self.transform(image)
+        # Load and transform image
+        image = Image.open(sample["image_id"]).convert("RGB")
+        if self.transform:
+            image = self.transform(image)
 
-        # Tokenize câu hỏi
-        question = sample["question"].lower().split()
-        question_length = len(question)
+        # Pad sequences
+        q_tokens = sample["question_tokens"]
+        a_tokens = sample["answer_tokens"]
 
-        # Chuyển các từ thành index, padding nếu cần
-        question_indices = []
-        for word in question[: self.max_question_length]:
-            if word in self.word2idx:
-                question_indices.append(self.word2idx[word])
-            else:
-                question_indices.append(self.word2idx["<unk>"])
+        q_tokens = q_tokens[: self.max_question_length]
+        q_tokens = q_tokens + [0] * (self.max_question_length - len(q_tokens))
 
-        # Padding câu hỏi
-        while len(question_indices) < self.max_question_length:
-            question_indices.append(self.word2idx["<pad>"])
-
-        # Tương tự cho câu trả lời
-        answer = sample["answer"].lower().split()
-        answer_length = len(answer)
-
-        answer_indices = []
-        for word in answer[: self.max_answer_length]:
-            if word in self.word2idx:
-                answer_indices.append(self.word2idx[word])
-            else:
-                answer_indices.append(self.word2idx["<unk>"])
-
-        while len(answer_indices) < self.max_answer_length:
-            answer_indices.append(self.word2idx["<pad>"])
+        a_tokens = a_tokens[: self.max_answer_length]
+        a_tokens = a_tokens + [0] * (self.max_answer_length - len(a_tokens))
 
         return {
             "image": image,
-            "question": torch.LongTensor(question_indices),
-            "question_length": min(question_length, self.max_question_length),
-            "answer": torch.LongTensor(answer_indices),
-            "answer_length": min(answer_length, self.max_answer_length),
-            "type": sample["type"],
+            "question": torch.tensor(q_tokens, dtype=torch.long),
+            "answer": torch.tensor(a_tokens, dtype=torch.long),
+            "question_type": sample["question_type"],
+            "difficulty": sample["difficulty"],
         }
 
     def get_vocab_size(self) -> int:
         """Trả về kích thước của vocabulary"""
-        return self.vocab_size
+        return len(self.word2idx)
 
     def idx2word_func(self, idx: int) -> str:
         """Chuyển đổi index thành từ"""

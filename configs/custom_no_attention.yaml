@@ -1,0 +1,43 @@
+model:
+  name: "vqa_custom_no_attention"
+  cnn:
+    type: "custom"
+    output_dim: 512
+    pretrained: false
+  lstm:
+    embed_dim: 256
+    hidden_dim: 512
+    num_layers: 2
+    dropout: 0.5
+  attention:
+    enabled: false
+
+training:
+  batch_size: 64
+  accumulation_steps: 1
+  epochs: 100
+  optimizer:
+    type: "adamw"
+    lr: 5e-4
+    weight_decay: 0.01
+  scheduler:
+    type: "cosine"
+    warmup_epochs: 10
+  grad_clip: 5.0
+  fp16: true
+
+data:
+  max_question_length: 20
+  max_answer_length: 5
+  num_workers: 4
+  augmentation:
+    enabled: true
+    color_jitter: 0.4
+    random_affine: true
+    random_horizontal_flip: true
+
+logging:
+  log_every: 100
+  eval_every: 1000
+  save_every: 5000
+  keep_last: 1
