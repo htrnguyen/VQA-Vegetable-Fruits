@@ -16,27 +16,49 @@ class VQADataset(Dataset):
         self,
         data_dir: str,
         split: str,
-        transform: Optional[transforms.Compose] = None,
+        vocab_path: str,
         max_question_length: int = 20,
         max_answer_length: int = 5,
+        transform=None,
     ):
         """
-        Khởi tạo VQADataset
         Args:
             data_dir: Thư mục chứa dữ liệu
             split: 'train', 'val' hoặc 'test'
-            transform: Các transform để áp dụng lên ảnh
+            vocab_path: Đường dẫn đến file vocab.json
             max_question_length: Độ dài tối đa của câu hỏi
             max_answer_length: Độ dài tối đa của câu trả lời
+            transform: Transform cho ảnh
         """
-        # Load samples
-        samples_path = os.path.join(data_dir, split, "samples.json")
-        with open(samples_path, "r", encoding="utf-8") as f:
-            self.samples = json.load(f)
-
-        self.transform = transform
+        super().__init__()
+        self.data_dir = data_dir
+        self.split = split
         self.max_question_length = max_question_length
         self.max_answer_length = max_answer_length
+
+        # Load vocabulary
+        with open(vocab_path) as f:
+            self.vocab = json.load(f)
+        self.word2idx = {word: idx for idx, word in enumerate(self.vocab)}
+
+        # Load samples
+        samples_path = os.path.join(data_dir, split, "samples.json")
+        with open(samples_path) as f:
+            self.samples = json.load(f)
+
+        # Setup transform
+        if transform is None:
+            self.transform = transforms.Compose(
+                [
+                    transforms.Resize((224, 224)),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                    ),
+                ]
+            )
+        else:
+            self.transform = transform
 
     def __len__(self) -> int:
         """Trả về số lượng mẫu trong dataset"""
@@ -55,8 +77,19 @@ class VQADataset(Dataset):
         """
         sample = self.samples[idx]
 
+        # Fix image path
+        image_path = sample["image_id"]
+        # Remove data/processed/images prefix if exists
+        image_path = image_path.replace("data\\processed\\images\\", "")
+        image_path = image_path.replace("data/processed/images/", "")
+        # Convert Windows path to system path
+        image_path = image_path.replace("\\", "/")
+        # Join with data dir
+        image_path = os.path.join(self.data_dir, "images", image_path)
+        image_path = os.path.normpath(image_path)
+
         # Load and transform image
-        image = Image.open(sample["image_id"]).convert("RGB")
+        image = Image.open(image_path).convert("RGB")
         if self.transform:
             image = self.transform(image)
 

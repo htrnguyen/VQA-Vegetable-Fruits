@@ -66,6 +66,22 @@ def load_config(config_path: str) -> dict:
     return config
 
 
+def get_scheduler(optimizer, scheduler_config):
+    """Get learning rate scheduler"""
+    if scheduler_config["type"] == "cosine":
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=scheduler_config["warmup_epochs"],
+        )
+    else:
+        scheduler = optim.lr_scheduler.StepLR(
+            optimizer,
+            step_size=scheduler_config["warmup_epochs"],
+            gamma=0.1,
+        )
+    return scheduler
+
+
 def train_epoch(
     model: nn.Module,
     train_loader: DataLoader,
@@ -146,11 +162,20 @@ def train(
     """Train a single model configuration"""
     # Setup training
     criterion = nn.CrossEntropyLoss()
+
+    # Get optimizer config
+    optimizer_config = config["training"]["optimizer"]
     optimizer = optim.AdamW(
         model.parameters(),
-        lr=config["training"]["optimizer"]["lr"],
-        weight_decay=config["training"]["optimizer"]["weight_decay"],
+        lr=float(optimizer_config["lr"]),  # Convert string to float if needed
+        weight_decay=optimizer_config["weight_decay"],
     )
+
+    # Get scheduler config
+    scheduler_config = config["training"]["scheduler"]
+    scheduler = get_scheduler(optimizer, scheduler_config)
+
+    # Setup mixed precision training
     scaler = GradScaler(enabled=config["training"]["fp16"])
 
     # Training loop
@@ -173,60 +198,32 @@ def train(
     return val_metrics
 
 
-def train_models(
-    logger: Logger,
-    vocab_size: int,
-    train_loader: DataLoader,
-    val_loader: DataLoader,
-    args: argparse.Namespace,
-):
-    model_configs = [
-        {
-            "name": "pretrained_no_attention",
-            "cnn_type": "resnet50",
-            "use_pretrained": True,
-            "use_attention": False,
-        },
-        {
-            "name": "pretrained_attention",
-            "cnn_type": "resnet50",
-            "use_pretrained": True,
-            "use_attention": True,
-        },
-        {
-            "name": "custom_no_attention",
-            "cnn_type": "custom",
-            "use_pretrained": False,
-            "use_attention": False,
-        },
-        {
-            "name": "custom_attention",
-            "cnn_type": "custom",
-            "use_pretrained": False,
-            "use_attention": True,
-        },
-    ]
+def train_models(logger, vocab_size, train_loader, val_loader, args):
+    # Load config từ file
+    config = load_config(args.config)
 
-    results = {}
-    for config in model_configs:
-        logger.info(f"\nTraining {config['name']}...")
+    # Validate config structure
+    required_keys = ["model", "training", "data", "logging"]
+    for key in required_keys:
+        if key not in config:
+            raise KeyError(f"Missing required section '{key}' in config")
 
-        model = VQAModel(
-            vocab_size=vocab_size,
-            cnn_type=config["cnn_type"],
-            use_pretrained=config["use_pretrained"],
-            use_attention=config["use_attention"],
-        )
+    # Create model
+    model = VQAModel(
+        vocab_size=vocab_size,
+        cnn_type=config["model"]["cnn"]["type"],
+        use_pretrained=config["model"]["cnn"]["pretrained"],
+        use_attention=config["model"]["attention"]["enabled"],
+    )
 
-        # Setup device
-        device = torch.device(args.device)
-        logger.info(f"Using device: {device}")
+    # Setup device
+    device = torch.device(args.device)
+    logger.info(f"Using device: {device}")
 
-        # Train model
-        train_metrics = train(model, train_loader, val_loader, config, device, logger)
-        results[config["name"]] = train_metrics
+    # Train model
+    train_metrics = train(model, train_loader, val_loader, config, device, logger)
 
-    return results
+    return {config["model"]["name"]: train_metrics}
 
 
 def main():
