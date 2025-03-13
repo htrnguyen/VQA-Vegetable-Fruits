@@ -61,11 +61,11 @@ class LSTMDecoder(nn.Module):
             )
 
         # Fusion layer
-        fusion_dim = hidden_dim * 2
+        fusion_dim = hidden_dim * 2  # từ bidirectional LSTM
         if use_attention:
-            fusion_dim += hidden_dim  # Add attention context dimension
+            fusion_dim += hidden_dim  # Add attention context
         else:
-            fusion_dim += visual_dim  # Add visual feature dimension
+            fusion_dim += visual_dim  # Add visual features
 
         # Output layers với residual connections
         self.output_layer = nn.Sequential(
@@ -126,6 +126,11 @@ class LSTMDecoder(nn.Module):
 
             # Concatenate question và visual features
             combined = torch.cat([question_repr, visual_features], dim=1)
+
+        # Add debug prints
+        print(f"Question repr shape: {question_repr.shape}")
+        print(f"Visual features shape: {visual_features.shape}")
+        print(f"Combined shape: {combined.shape}")
 
         # Generate output logits
         logits = self.output_layer(combined)

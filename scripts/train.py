@@ -5,6 +5,7 @@ import yaml
 from pathlib import Path
 from datetime import datetime
 from typing import Dict
+import time
 
 import torch
 import torch.nn as nn
@@ -101,7 +102,7 @@ def train_epoch(
         answers = batch["answer"].to(device)
 
         # Forward pass with mixed precision
-        with autocast():
+        with torch.amp.autocast("cuda"):
             outputs = model(images, questions)
             loss = criterion(
                 outputs["logits"].view(-1, outputs["logits"].size(-1)), answers.view(-1)
@@ -138,7 +139,7 @@ def validate(
             questions = batch["question"].to(device)
             answers = batch["answer"].to(device)
 
-            with autocast(enabled=config["training"]["fp16"]):
+            with torch.amp.autocast("cuda", enabled=config["training"]["fp16"]):
                 outputs = model(images, questions)
                 loss = criterion(outputs["logits"], answers)
 
@@ -162,38 +163,45 @@ def train(
     """Train a single model configuration"""
     # Setup training
     criterion = nn.CrossEntropyLoss()
-
-    # Get optimizer config
     optimizer_config = config["training"]["optimizer"]
     optimizer = optim.AdamW(
         model.parameters(),
-        lr=float(optimizer_config["lr"]),  # Convert string to float if needed
+        lr=float(optimizer_config["lr"]),
         weight_decay=optimizer_config["weight_decay"],
     )
-
-    # Get scheduler config
-    scheduler_config = config["training"]["scheduler"]
-    scheduler = get_scheduler(optimizer, scheduler_config)
-
-    # Setup mixed precision training
-    scaler = GradScaler(enabled=config["training"]["fp16"])
+    scheduler = get_scheduler(optimizer, config["training"]["scheduler"])
+    scaler = torch.amp.GradScaler("cuda")
 
     # Training loop
     best_val_loss = float("inf")
-    for epoch in range(config["training"]["epochs"]):
+    num_epochs = config["training"]["epochs"]
+    logger.info(f"Training for {num_epochs} epochs...")
+
+    for epoch in range(num_epochs):
+        # Time the epoch
+        epoch_start = time.time()
+
         train_loss = train_epoch(
             model, train_loader, criterion, optimizer, device, scaler, logger
         )
         val_loss, val_metrics = validate(model, val_loader, criterion, device, config)
 
+        epoch_time = time.time() - epoch_start
+
         # Log metrics
         logger.info(
-            f"Epoch {epoch}: train_loss={train_loss:.4f}, val_loss={val_loss:.4f}"
+            f"Epoch {epoch+1}/{num_epochs} "
+            f"[{epoch_time:.1f}s]: "
+            f"train_loss={train_loss:.4f}, "
+            f"val_loss={val_loss:.4f}"
         )
 
         # Save best model
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            # Add model saving code here
+
+        scheduler.step()
 
     return val_metrics
 
@@ -216,8 +224,9 @@ def train_models(logger, vocab_size, train_loader, val_loader, args):
         use_attention=config["model"]["attention"]["enabled"],
     )
 
-    # Setup device
+    # Setup device and move model to device
     device = torch.device(args.device)
+    model = model.to(device)
     logger.info(f"Using device: {device}")
 
     # Train model
