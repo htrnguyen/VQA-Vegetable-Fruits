@@ -1,63 +1,53 @@
-# Project directories
-/data/processed/
-/data/raw/
-/checkpoints/
-/logs/
-/notebooks/.ipynb_checkpoints/
+# Loại bỏ thư mục data/raw và nội dung
+data/raw/*
+!data/raw/.gitkeep
 
-# Model files
+# Loại bỏ thư mục data/processed/images và nội dung
+data/processed/images/*
+!data/processed/images/.gitkeep
+
+# Loại bỏ các file dữ liệu lớn
 *.pth
 *.pt
 *.ckpt
+*.bin
+*.h5
+*.hdf5
+*.pkl
+*.pickle
 
-# Log files
-*.log
-wandb/
-
-# Python
+# Loại bỏ cache Python
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+*.so
 
-# Virtual Environment
+# Loại bỏ môi trường ảo
 venv/
 env/
-.env
-.venv
 ENV/
 
-# IDE
-.idea/
+# Loại bỏ file backup
+data/processed/backup.json
+
+# Loại bỏ file logs
+*.log
+logs/
+
+# Loại bỏ file IDE
 .vscode/
+.idea/
 *.swp
 *.swo
 
-# OS
+# Loại bỏ file hệ thống
 .DS_Store
 Thumbs.db
 
-# Jupyter Notebook
-.ipynb_checkpoints
-*.ipynb
-
-# Test coverage
-.coverage
-htmlcov/
-.pytest_cache/
+.vscode/*
+vizwiz/*
+__pycache__/modelArchitecture.cpython-311.pyc
+*.csv
+Saved_Models/*.pth
+*.pyc
