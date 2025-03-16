@@ -1,0 +1,7 @@
+README.md
+setup.py
+vqa_fruits.egg-info/PKG-INFO
+vqa_fruits.egg-info/SOURCES.txt
+vqa_fruits.egg-info/dependency_links.txt
+vqa_fruits.egg-info/requires.txt
+vqa_fruits.egg-info/top_level.txt

@@ -3,8 +3,7 @@ data/raw/*
 !data/raw/.gitkeep
 
 # Loại bỏ thư mục data/processed/images và nội dung
-data/processed/images/*
-!data/processed/images/.gitkeep
+data/processed/*
 
 # Loại bỏ các file dữ liệu lớn
 *.pth

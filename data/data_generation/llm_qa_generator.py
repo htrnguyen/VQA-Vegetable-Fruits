@@ -14,9 +14,15 @@ PROCESSED_DIR = os.path.join(DATA_DIR, "processed")  # Thư mục lưu kết qu�
 os.makedirs(PROCESSED_DIR, exist_ok=True)
 
 # === Cấu hình API ===
-API_KEYS = ["AIzaSyCLkZQmuTLXRRTAkz4GNGFCgywbXt_wf6I"]  # Thay bằng API Key thực tế
+API_KEYS = [
+    "Your API Key 1",
+    "Your API Key 2",
+    "Your API Key 3",
+]
+CURRENT_API_KEY_INDEX = 0
+MAX_RETRIES = len(API_KEYS)
 
-REQUEST_DELAY = 5  # Delay giữa các request (giây)
+REQUEST_DELAY = 3  # Delay giữa các request (giây)
 
 # === Cấu hình Model ===
 genai.configure(api_key=API_KEYS[0])
@@ -146,10 +152,13 @@ Quan sát ảnh và trả lời 4 câu hỏi về quả {fruit_name}. Trả lờ
 6. Không dùng tiếng Anh hoặc ký tự đặc biệt
 7. Không thêm chú thích hoặc giải thích
 8. Không lặp lại câu hỏi trong câu trả lời
+9. Đặt câu hỏi có thể dùng {fruit_name} để hỏi ngoại trừ câu hỏi về tên quả, ví dụ: {fruit_name} có màu gì?, {fruit_name} đặt ở đâu?
 
-## Quy tắc trả lời cho từng loại câu hỏi:
+## Quy tắc đặt câu hỏi và trả lời cho từng loại câu hỏi:
 
 1. Tên quả:
+- Hỏi về tên, dựa vào ảnh để hỏi về tên quả là gì
+- Ví dụ: "Đây là quả gì?", "Quả này tên gì?", "Quả này là gì?", ... 
 - Chỉ dùng tên phổ biến của quả
 - Có thể dùng: "quả + tên", "trái + tên", hoặc chỉ "tên quả"
 - Nếu không xác định được: trả lời "không rõ"
@@ -159,6 +168,8 @@ Ví dụ hợp lệ:
 - ["trái táo", "trái táo", "trái táo", "trái táo", "trái táo"]
 
 2. Số lượng:
+- Hỏi về số lượng quả, đa dạng về cách hỏi, chủ yếu là hỏi về số lượng quả là bao nhiêu
+- Ví dụ: "Có bao nhiêu {fruit_name}?", "{fruit_name} có bao nhiêu quả?", "Có bao nhiêu quả {fruit_name}?", ...
 - Chỉ dùng số đếm chính xác: một, hai, ba, bốn, năm...
 - Có thể dùng chữ số: 1, 2, 3, 4, 5
 - Nếu không đếm được: chỉ trả lời "không rõ"
@@ -168,6 +179,8 @@ Ví dụ hợp lệ:
 - ["không rõ", "không rõ", "không rõ", "không rõ", "không rõ"]
 
 3. Màu sắc:
+- Hỏi về màu sắc quả, dựa vào ảnh để hỏi về màu sắc quả là gì
+- Ví dụ: "Quả này có màu gì?", "{fruit_name} có màu gì?", "Màu sắc của quả là gì?", ...
 - Chỉ dùng tên màu cơ bản: đỏ, vàng, xanh, nâu...
 - Có thể thêm "màu" phía trước
 - Nếu không xác định được: trả lời "không rõ"
@@ -176,6 +189,8 @@ Ví dụ hợp lệ:
 - ["màu đỏ", "màu đỏ", "màu đỏ", "màu đỏ", "màu đỏ"]
 
 4. Vị trí:
+- Hỏi về vị trí quả, dựa vào ảnh để hỏi về vị trí quả đặt ở đâu
+- Ví dụ: "Quả này đang đặt ở đâu?", "{fruit_name} đang đặt ở đâu?", "Quả này ở đâu?", ...
 - Chỉ dùng vị trí cụ thể: bàn, đĩa, rổ, hộp, giỏ
 - Có thể thêm "trên", "trong", "dưới" phía trước
 - Nếu không xác định được: trả lời "không rõ"
@@ -186,24 +201,61 @@ Ví dụ hợp lệ:
 - ["trong rổ", "trong rổ", "trong rổ", "trong rổ", "trong rổ"]
 - ["không rõ", "không rõ", "không rõ", "không rõ", "không rõ"]
 
+## Yêu cầu về đa dạng câu hỏi:
+1. Mỗi ảnh phải có câu hỏi khác nhau, chọn từ các mẫu sau:
+
+Câu hỏi về tên:
+- "Đây là quả gì?"
+- "Quả này tên gì?"
+- "Loại quả trong hình là gì?"
+- "Tên của quả này là gì?"
+- "Quả trong ảnh là quả gì?"
+
+Câu hỏi về số lượng:
+- "Có bao nhiêu {fruit_name}?"
+- "Số lượng {fruit_name} là bao nhiêu?"
+- "Đếm được bao nhiêu {fruit_name}?"
+- "Trong ảnh có mấy {fruit_name}?"
+- "Bạn thấy bao nhiêu {fruit_name}?"
+
+Câu hỏi về màu sắc:
+- "{fruit_name} có màu gì?"
+- "Màu sắc của {fruit_name} là gì?"
+- "Quả này màu gì?"
+- "{fruit_name} trong ảnh màu gì?"
+- "Màu của {fruit_name} như thế nào?"
+
+Câu hỏi về vị trí:
+- "{fruit_name} đặt ở đâu?"
+- "Vị trí của {fruit_name} là ở đâu?"
+- "{fruit_name} được đặt ở chỗ nào?"
+- "Bạn thấy {fruit_name} ở đâu?"
+- "Nơi đặt {fruit_name} là ở đâu?"
+
+2. Quy tắc chọn câu hỏi:
+- Mỗi ảnh phải chọn câu hỏi khác với ảnh trước đó
+- Câu hỏi phải phù hợp với ngữ cảnh của ảnh
+- Không lặp lại cùng một câu hỏi cho nhiều ảnh liên tiếp
+- Đảm bảo sử dụng hết tất cả các dạng câu hỏi
+
 ## Cấu trúc JSON bắt buộc:
 {{{{
     "image_id": "{folder_name}/tên_file.jpg",
     "questions": [
         {{{{
-            "question": "Đây là quả gì?",
+            "question": "Câu hỏi về tên quả",
             "answers": ["câu trả lời", "câu trả lời", "câu trả lời", "câu trả lời", "câu trả lời"]
         }}}},
         {{{{
-            "question": "Có bao nhiêu quả?",
+            "question": "Câu hỏi về số lượng quả",
             "answers": ["câu trả lời", "câu trả lời", "câu trả lời", "câu trả lời", "câu trả lời"]
         }}}},
         {{{{
-            "question": "Màu sắc của quả?",
+            "question": "Câu hỏi về màu sắc quả",
             "answers": ["câu trả lời", "câu trả lời", "câu trả lời", "câu trả lời", "câu trả lời"]
         }}}},
         {{{{
-            "question": "Quả này đặt ở đâu?",
+            "question": "Câu hỏi về vị trí quả",
             "answers": ["câu trả lời", "câu trả lời", "câu trả lời", "câu trả lời", "câu trả lời"]
         }}}}
     ]
@@ -214,47 +266,70 @@ Chỉ trả về JSON theo đúng cấu trúc, không thêm bất kỳ nội dun
     return prompt.strip()
 
 
+def switch_api_key():
+    """Chuyển sang API key tiếp theo."""
+    global CURRENT_API_KEY_INDEX
+    CURRENT_API_KEY_INDEX = (CURRENT_API_KEY_INDEX + 1) % len(API_KEYS)
+    new_key = API_KEYS[CURRENT_API_KEY_INDEX]
+    genai.configure(api_key=new_key)
+    print(f"Đã chuyển sang API key {CURRENT_API_KEY_INDEX + 1}/{len(API_KEYS)}")
+    return new_key
+
+
 def call_ai_api(image_path: str, folder_name: str) -> dict:
     """Gửi request đến AI và nhận kết quả."""
-    encoded_image = encode_image(image_path)
+    retries = 0
+    while retries < MAX_RETRIES:
+        try:
+            encoded_image = encode_image(image_path)
+            response = model.generate_content(
+                contents=[
+                    {
+                        "role": "user",
+                        "parts": [
+                            {"text": generate_prompt(image_path, folder_name)},
+                            {
+                                "inline_data": {
+                                    "mime_type": "image/jpeg",
+                                    "data": encoded_image,
+                                }
+                            },
+                        ],
+                    }
+                ],
+                generation_config={
+                    "temperature": 1,
+                    "max_output_tokens": 2048,
+                },
+            )
 
-    try:
-        response = model.generate_content(
-            contents=[
-                {
-                    "role": "user",
-                    "parts": [
-                        {"text": generate_prompt(image_path, folder_name)},
-                        {
-                            "inline_data": {
-                                "mime_type": "image/jpeg",
-                                "data": encoded_image,
-                            }
-                        },
-                    ],
-                }
-            ],
-            generation_config={
-                "temperature": 0.5,
-                "max_output_tokens": 2048,
-            },
-        )
+            if response.text:
+                image_id = f"{folder_name}/{os.path.basename(image_path)}"
+                answers = parse_response_to_dict(response.text, image_id)
+                if answers:
+                    return answers
 
-        if response.text:
-            # Tạo image_id bao gồm tên thư mục
-            image_id = f"{folder_name}/{os.path.basename(image_path)}"
+            print(f"Không thể xử lý phản hồi: {response.text}")
+            return None
 
-            # Parse câu trả lời thành dict
-            answers = parse_response_to_dict(response.text, image_id)
-            if answers:
-                return answers
+        except exceptions.GoogleAPIError as e:
+            print(f"Lỗi API ({e.__class__.__name__}): {str(e)}")
+            if "quota" in str(e).lower() or "rate limit" in str(e).lower():
+                if retries < MAX_RETRIES - 1:
+                    print("Đang thử chuyển API key khác...")
+                    switch_api_key()
+                    retries += 1
+                    time.sleep(REQUEST_DELAY)
+                    continue
+                else:
+                    print("Đã hết API key để thử!")
+            return None
 
-        print(f"Không thể xử lý phản hồi: {response.text}")
-        return None
+        except Exception as e:
+            print(f"Lỗi không mong đợi: {str(e)}")
+            return None
 
-    except Exception as e:
-        print(f"Lỗi khi xử lý {image_path}: {str(e)}")
-        return None
+    return None
 
 
 def parse_response_to_dict(response_text: str, image_id: str) -> dict:
@@ -329,7 +404,7 @@ def process_images():
                     # Kiểm tra nếu ảnh đã xử lý thì bỏ qua (sử dụng full image_id)
                     full_image_id = f"{folder_name}/{img_name}"
                     if full_image_id in processed_images:
-                        print(f"Bỏ qua ảnh đã xử lý: {full_image_id}")
+                        # print(f"Bỏ qua ảnh đã xử lý: {full_image_id}")
                         continue
 
                     image_path = os.path.join(folder_path, img_name)

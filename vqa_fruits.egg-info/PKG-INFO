@@ -1,0 +1,11 @@
+Metadata-Version: 2.2
+Name: vqa-fruits
+Version: 0.1
+Requires-Dist: torch
+Requires-Dist: torchvision
+Requires-Dist: numpy
+Requires-Dist: matplotlib
+Requires-Dist: pyyaml
+Requires-Dist: tqdm
+Requires-Dist: scikit-learn
+Dynamic: requires-dist
