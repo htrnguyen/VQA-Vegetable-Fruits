@@ -79,9 +79,11 @@ def get_loaders(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=2,  # Giảm xuống 2 worker theo warning
-        pin_memory=True,  # Thêm pin_memory=True để tăng tốc data transfer to GPU
-        persistent_workers=True,  # Giữ workers alive giữa các epoch
+        num_workers=2,
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=2,  # Prefetch 2 batches per worker
+        drop_last=True,  # Bỏ batch cuối nếu không đủ batch_size
     )
 
     val_loader = DataLoader(
@@ -91,6 +93,7 @@ def get_loaders(
         num_workers=2,
         pin_memory=True,
         persistent_workers=True,
+        prefetch_factor=2,
     )
 
     test_loader = DataLoader(

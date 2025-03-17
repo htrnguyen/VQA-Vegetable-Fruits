@@ -6,6 +6,10 @@ from dataset_loader import get_loaders
 from models.cnn_lstm import VQAModel
 from torch.amp import autocast, GradScaler
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from tqdm import tqdm
+import time
+from datetime import datetime
+import os
 
 
 def parse_args():
@@ -64,6 +68,20 @@ def parse_args():
         help="Directory to save model checkpoints",
     )
 
+    # Thêm các tham số mới
+    parser.add_argument(
+        "--warmup_epochs",
+        type=int,
+        default=2,
+        help="Number of epochs for learning rate warmup",
+    )
+    parser.add_argument(
+        "--gradient_clip", type=float, default=1.0, help="Gradient clipping value"
+    )
+    parser.add_argument(
+        "--label_smoothing", type=float, default=0.1, help="Label smoothing factor"
+    )
+
     args = parser.parse_args()
     return args
 
@@ -76,24 +94,23 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, u
     total_loss, total_correct = 0, 0
     total_samples = 0
 
-    for images, questions, answers in train_loader:
+    # Thêm progress bar
+    pbar = tqdm(train_loader, desc="Training", leave=False)
+
+    for images, questions, answers in pbar:
         images, questions, answers = (
             images.to(device),
             questions.to(device),
             answers.to(device),
         )
 
-        # 🔥 Kiểm tra answer_id hợp lệ
         answers = torch.clamp(answers, min=0, max=args.num_answers - 1)
-
         optimizer.zero_grad()
 
-        # 🔥 Tăng tốc với Mixed Precision (nếu bật `use_amp`)
         with autocast("cuda", enabled=use_amp):
             outputs = model(images, questions)
             loss = criterion(outputs, answers)
 
-        # 🔥 Dùng scaler để tránh lỗi underflow với AMP
         if use_amp:
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -102,11 +119,14 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, u
             loss.backward()
             optimizer.step()
 
-        # Thống kê
+        # Cập nhật progress bar
         total_loss += loss.item()
         predicted = torch.argmax(outputs, dim=1)
+        batch_acc = (predicted == answers).sum().item() / answers.size(0)
         total_correct += (predicted == answers).sum().item()
         total_samples += answers.size(0)
+
+        pbar.set_postfix({"loss": f"{loss.item():.4f}", "acc": f"{batch_acc:.4f}"})
 
     avg_loss = total_loss / len(train_loader)
     accuracy = total_correct / total_samples
@@ -188,7 +208,7 @@ def train_model(args):
     ).to(device)
 
     # ✅ Loss function & Optimizer
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
     optimizer = optim.Adam(
         model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
     )
@@ -210,34 +230,101 @@ def train_model(args):
     if args.device == "cuda":
         model = torch.compile(model)
 
-    # ✅ Vòng lặp huấn luyện
+    # Thêm tracking thời gian
+    start_time = time.time()
+    train_history = {
+        "train_loss": [],
+        "train_acc": [],
+        "val_loss": [],
+        "val_acc": [],
+        "lr": [],
+        "epoch_times": [],
+    }
+
+    # Tạo thư mục lưu checkpoint
+    checkpoint_dir = args.checkpoint_dir
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
+    print(f"\nStarting training at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Model parameters: {sum(p.numel() for p in model.parameters())/1e6:.2f}M")
+
+    # Tạo Warmup Scheduler
+    warmup_scheduler = None
+    if args.warmup_epochs > 0:
+        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=args.warmup_epochs * len(train_loader),
+        )
+
     for epoch in range(args.num_epochs):
+        epoch_start = time.time()
+
         train_loss, train_acc = train_one_epoch(
             model, train_loader, criterion, optimizer, scaler, device, args.use_amp
         )
         val_loss, val_acc = validate_model(model, val_loader, criterion, device)
 
-        # Thêm dòng này
+        epoch_time = time.time() - epoch_start
+        current_lr = optimizer.param_groups[0]["lr"]
+
+        # Lưu history
+        train_history["train_loss"].append(train_loss)
+        train_history["train_acc"].append(train_acc)
+        train_history["val_loss"].append(val_loss)
+        train_history["val_acc"].append(val_acc)
+        train_history["lr"].append(current_lr)
+        train_history["epoch_times"].append(epoch_time)
+
         scheduler.step(val_acc)
 
-        # Thêm early stopping check
+        # In thông tin epoch
+        print(
+            f"Epoch {epoch+1}/{args.num_epochs} "
+            f"[{epoch_time:.1f}s] - "
+            f"lr: {current_lr:.6f} | "
+            f"Train Loss: {train_loss:.4f}, Acc: {train_acc:.4f} | "
+            f"Val Loss: {val_loss:.4f}, Acc: {val_acc:.4f}"
+        )
+
+        # Lưu checkpoint
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            checkpoint = {
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "train_history": train_history,
+                "best_val_acc": best_val_acc,
+            }
+            torch.save(
+                checkpoint,
+                f"{checkpoint_dir}/best_model_ep{epoch+1}_acc{val_acc:.4f}.pth",
+            )
+            print(f"Saved best model checkpoint (val_acc: {val_acc:.4f})")
+
+        # Early stopping
         early_stopping(val_loss)
         if early_stopping.early_stop:
             print("Early stopping triggered")
             break
 
-        print(
-            f"📌 Epoch {epoch+1}/{args.num_epochs} - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}"
-        )
+        # Gradient clipping
+        if args.gradient_clip > 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.gradient_clip)
 
-        # ✅ Lưu mô hình tốt nhất
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save(model.state_dict(), f"best_model_cnn_lstm.pth")
-            print("✅ Đã lưu mô hình tốt nhất!")
+        # Warmup learning rate
+        if warmup_scheduler and epoch < args.warmup_epochs:
+            warmup_scheduler.step()
+
+    total_time = time.time() - start_time
+    print(f"\nTraining completed in {total_time/3600:.2f} hours")
+    print(f"Best validation accuracy: {best_val_acc:.4f}")
 
 
-# ✅ Chạy train.py
+# Chạy train.py
 if __name__ == "__main__":
     args = parse_args()
     train_model(args)
