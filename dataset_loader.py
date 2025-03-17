@@ -41,19 +41,34 @@ class VQADataset(Dataset):
         Lấy một mẫu dữ liệu.
         :return: image (Tensor), question (Tensor), answer_id (int)
         """
-        sample = self.data[idx]
-        image = sample["image"]
+        try:
+            sample = self.data[idx]
+            image = sample["image"]
 
-        # Áp dụng augmentation
-        if self.is_train:
-            image = self.train_transform(image)
-        else:
-            image = self.val_transform(image)
+            # Áp dụng augmentation
+            if self.is_train:
+                image = self.train_transform(image)
+            else:
+                image = self.val_transform(image)
 
-        question = sample["question"]  # Tensor câu hỏi (max_len=20)
-        answer_id = sample["answer_id"]  # ID câu trả lời (int)
+            question = sample["question"]  # Tensor câu hỏi (max_len=30)
+            answer_id = sample["answer_id"]  # ID câu trả lời (int)
 
-        return image, question, answer_id
+            # Kiểm tra dữ liệu có lỗi không
+            if torch.isnan(image).any() or torch.isinf(image).any():
+                raise ValueError(f"Lỗi NaN/Inf trong image tại index {idx}")
+            if torch.isnan(question).any() or torch.isinf(question).any():
+                raise ValueError(f"Lỗi NaN/Inf trong question tại index {idx}")
+            if answer_id < 0 or answer_id >= 500:
+                raise ValueError(
+                    f"Lỗi: answer_id {answer_id} không hợp lệ tại index {idx}"
+                )
+
+            return image, question, answer_id
+
+        except Exception as e:
+            print(f"Lỗi ở index {idx}: {e}")
+            return None
 
 
 def get_loaders(
