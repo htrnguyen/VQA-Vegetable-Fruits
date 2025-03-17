@@ -17,25 +17,19 @@ class VQADataset(Dataset):
         self.num_answers = num_answers if num_answers else len(answer_dict)
         self.is_train = is_train
 
-        # Data Augmentation cho ảnh
+        # Định nghĩa mean và std từ bước tiền xử lý
+        self.mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+        self.std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+
+        # Data Augmentation cho tập train
         self.train_transform = transforms.Compose(
             [
                 transforms.RandomHorizontalFlip(),
                 transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
                 transforms.RandomRotation(10),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
             ]
         )
-
-        self.val_transform = transforms.Compose(
-            [
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                )
-            ]
-        )
+        # Không cần thêm Normalize ở đây vì ảnh đã được chuẩn hóa
 
     def __len__(self):
         return len(self.data)
@@ -46,15 +40,18 @@ class VQADataset(Dataset):
         :return: image (Tensor), question (Tensor), answer_id (int)
         """
         sample = self.data[idx]
-        image = sample["image"]
+        image = sample["image"]  # Tensor đã chuẩn hóa từ processed_data.pt
         question = sample["question"]  # Tensor câu hỏi (max_len=30)
         answer_id = int(sample["answer_id"])  # Đảm bảo answer_id là int
 
-        # Áp dụng augmentation cho ảnh
+        # Nếu là tập train, áp dụng augmentation
         if self.is_train:
+            # Unnormalize ảnh trước khi augment
+            image = image * self.std + self.mean  # Đưa về [0, 1]
+            image = torch.clamp(image, 0, 1)
             image = self.train_transform(image)
-        else:
-            image = self.val_transform(image)
+            # Chuẩn hóa lại sau augmentation
+            image = (image - self.mean) / self.std
 
         # Kiểm tra `answer_id` có hợp lệ không
         if answer_id >= self.num_answers:
@@ -88,12 +85,12 @@ def get_loaders(
     :param batch_size: Số lượng mẫu mỗi batch
     :param num_workers: Số lượng worker cho DataLoader
     :param limit_answers: Số lượng câu trả lời giới hạn (None = dùng toàn bộ)
-    :return: train_loader, val_loader, test_loader, num_answers
+    :return: train_loader, val_loader, test_loader, num_answers, answer_dict
     """
     # Load dữ liệu
     data = torch.load(data_path)
 
-    # Lấy số lượng câu trả lời thực tế từ dataset
+    # Lấy từ điển câu trả lời và số lượng
     answer_dict = data["answer_dict"]
     num_answers = limit_answers if limit_answers else len(answer_dict)
 
@@ -108,7 +105,7 @@ def get_loaders(
         data["test"], answer_dict, num_answers=num_answers, is_train=False
     )
 
-    # Kiểm tra nếu đang chạy trên CPU
+    # Kiểm tra nếu đang chạy trên CPU/GPU
     pin_memory = torch.cuda.is_available()
 
     # Tạo DataLoader
@@ -121,6 +118,7 @@ def get_loaders(
         persistent_workers=(num_workers > 0),
         prefetch_factor=2 if num_workers > 0 else None,
         drop_last=True,
+        collate_fn=collate_fn,
     )
 
     val_loader = DataLoader(
@@ -131,6 +129,7 @@ def get_loaders(
         pin_memory=pin_memory,
         persistent_workers=(num_workers > 0),
         prefetch_factor=2 if num_workers > 0 else None,
+        collate_fn=collate_fn,
     )
 
     test_loader = DataLoader(
@@ -139,6 +138,26 @@ def get_loaders(
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory,
+        collate_fn=collate_fn,
     )
 
-    return train_loader, val_loader, test_loader, num_answers
+    return train_loader, val_loader, test_loader, num_answers, answer_dict
+
+
+if __name__ == "__main__":
+    # Kiểm tra thử
+    train_loader, val_loader, test_loader, num_answers, answer_dict = get_loaders(
+        batch_size=4, num_workers=0  # Giảm num_workers để test trên máy yếu
+    )
+    print(f"Num answers: {num_answers}")
+    print(
+        f"Train batches: {len(train_loader)}, Val batches: {len(val_loader)}, Test batches: {len(test_loader)}"
+    )
+
+    # Lấy một batch mẫu từ train_loader
+    for batch in train_loader:
+        images, questions, answer_ids = batch
+        print(
+            f"Batch shape - Images: {images.shape}, Questions: {questions.shape}, Answer IDs: {answer_ids.shape}"
+        )
+        break
