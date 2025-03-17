@@ -4,16 +4,20 @@ from torchvision import transforms
 
 
 class VQADataset(Dataset):
-    def __init__(self, data, is_train=True):
+    def __init__(self, data, answer_dict, num_answers=None, is_train=True):
         """
         Dataset cho bài toán Visual Question Answering (VQA)
         :param data: List chứa các mẫu dữ liệu (image, question, answer_id)
+        :param answer_dict: Từ điển ánh xạ câu trả lời → ID
+        :param num_answers: Số lượng câu trả lời hợp lệ (nếu None, lấy toàn bộ)
         :param is_train: True nếu là dataset huấn luyện, False nếu là dataset kiểm tra
         """
         self.data = data
+        self.answer_dict = answer_dict
+        self.num_answers = num_answers if num_answers else len(answer_dict)
         self.is_train = is_train
 
-        # Thêm data augmentation
+        # Data Augmentation cho ảnh
         self.train_transform = transforms.Compose(
             [
                 transforms.RandomHorizontalFlip(),
@@ -38,81 +42,103 @@ class VQADataset(Dataset):
 
     def __getitem__(self, idx):
         """
-        Lấy một mẫu dữ liệu.
+        Lấy một mẫu dữ liệu
         :return: image (Tensor), question (Tensor), answer_id (int)
         """
-        try:
-            sample = self.data[idx]
-            image = sample["image"]
+        sample = self.data[idx]
+        image = sample["image"]
+        question = sample["question"]  # Tensor câu hỏi (max_len=30)
+        answer_id = int(sample["answer_id"])  # Đảm bảo answer_id là int
 
-            # Áp dụng augmentation
-            if self.is_train:
-                image = self.train_transform(image)
-            else:
-                image = self.val_transform(image)
+        # Áp dụng augmentation cho ảnh
+        if self.is_train:
+            image = self.train_transform(image)
+        else:
+            image = self.val_transform(image)
 
-            question = sample["question"]  # Tensor câu hỏi (max_len=30)
-            answer_id = sample["answer_id"]  # ID câu trả lời (int)
+        # Kiểm tra `answer_id` có hợp lệ không
+        if answer_id >= self.num_answers:
+            print(
+                f"⚠ Cảnh báo: answer_id {answer_id} vượt quá num_answers ({self.num_answers}). Gán thành <UNK>."
+            )
+            answer_id = 0  # Gán về <UNK> nếu không hợp lệ
 
-            # Kiểm tra dữ liệu có lỗi không
-            if torch.isnan(image).any() or torch.isinf(image).any():
-                raise ValueError(f"Lỗi NaN/Inf trong image tại index {idx}")
-            if torch.isnan(question).any() or torch.isinf(question).any():
-                raise ValueError(f"Lỗi NaN/Inf trong question tại index {idx}")
-            if answer_id < 0 or answer_id >= 500:
-                raise ValueError(
-                    f"Lỗi: answer_id {answer_id} không hợp lệ tại index {idx}"
-                )
+        return image, question, answer_id
 
-            return image, question, answer_id
 
-        except Exception as e:
-            print(f"Lỗi ở index {idx}: {e}")
-            return None
+def collate_fn(batch):
+    """
+    Hàm collate để bỏ batch lỗi
+    """
+    batch = [b for b in batch if b is not None]  # Bỏ None
+    if len(batch) == 0:
+        return None
+    return torch.utils.data.dataloader.default_collate(batch)
 
 
 def get_loaders(
-    data_path="data/processed/processed_data.pt", batch_size=32, num_workers=2
+    data_path="data/processed/processed_data.pt",
+    batch_size=32,
+    num_workers=2,
+    limit_answers=None,
 ):
     """
     Load dữ liệu từ `processed_data.pt` và tạo DataLoader.
     :param data_path: Đường dẫn đến file processed_data.pt
     :param batch_size: Số lượng mẫu mỗi batch
     :param num_workers: Số lượng worker cho DataLoader
-    :return: train_loader, val_loader, test_loader
+    :param limit_answers: Số lượng câu trả lời giới hạn (None = dùng toàn bộ)
+    :return: train_loader, val_loader, test_loader, num_answers
     """
     # Load dữ liệu
     data = torch.load(data_path)
 
+    # Lấy số lượng câu trả lời thực tế từ dataset
+    answer_dict = data["answer_dict"]
+    num_answers = limit_answers if limit_answers else len(answer_dict)
+
     # Tạo dataset
-    train_dataset = VQADataset(data["train"], is_train=True)
-    val_dataset = VQADataset(data["val"], is_train=False)
-    test_dataset = VQADataset(data["test"], is_train=False)
+    train_dataset = VQADataset(
+        data["train"], answer_dict, num_answers=num_answers, is_train=True
+    )
+    val_dataset = VQADataset(
+        data["val"], answer_dict, num_answers=num_answers, is_train=False
+    )
+    test_dataset = VQADataset(
+        data["test"], answer_dict, num_answers=num_answers, is_train=False
+    )
+
+    # Kiểm tra nếu đang chạy trên CPU
+    pin_memory = torch.cuda.is_available()
 
     # Tạo DataLoader
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=2,
-        pin_memory=True,
-        persistent_workers=True,
-        prefetch_factor=2,  # Prefetch 2 batches per worker
-        drop_last=True,  # Bỏ batch cuối nếu không đủ batch_size
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=(num_workers > 0),
+        prefetch_factor=2 if num_workers > 0 else None,
+        drop_last=True,
     )
 
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=2,
-        pin_memory=True,
-        persistent_workers=True,
-        prefetch_factor=2,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=(num_workers > 0),
+        prefetch_factor=2 if num_workers > 0 else None,
     )
 
     test_loader = DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
     )
 
-    return train_loader, val_loader, test_loader
+    return train_loader, val_loader, test_loader, num_answers
