@@ -74,7 +74,7 @@ def collate_fn(batch):
 
 
 def get_loaders(
-    data_path="data/processed/processed_data.pt",
+    data_path="../data/processed/processed_data.pt",
     batch_size=32,
     num_workers=2,
     limit_answers=None,
