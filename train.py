@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.optim as optim
 from dataset_loader import get_loaders
 from models.cnn_lstm import VQAModel
+from torch.amp import autocast, GradScaler
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
 def parse_args():
@@ -26,6 +28,9 @@ def parse_args():
         default="cuda",
         choices=["cuda", "cpu"],
         help="Thiết bị chạy mô hình",
+    )
+    parser.add_argument(
+        "--use_amp", action="store_true", help="Dùng AMP (Mixed Precision) để tăng tốc"
     )
 
     # Tham số của mô hình
@@ -52,11 +57,18 @@ def parse_args():
     )
     parser.add_argument("--dropout", type=float, default=0.3, help="Dropout rate")
 
+    parser.add_argument(
+        "--checkpoint_dir",
+        type=str,
+        default="checkpoints",
+        help="Directory to save model checkpoints",
+    )
+
     args = parser.parse_args()
     return args
 
 
-def train_one_epoch(model, train_loader, criterion, optimizer, device):
+def train_one_epoch(model, train_loader, criterion, optimizer, scaler, device, use_amp):
     """
     Chạy một epoch huấn luyện
     """
@@ -71,12 +83,24 @@ def train_one_epoch(model, train_loader, criterion, optimizer, device):
             answers.to(device),
         )
 
-        optimizer.zero_grad()
-        outputs = model(images, questions)  # (batch_size, num_answers)
+        # 🔥 Kiểm tra answer_id hợp lệ
+        answers = torch.clamp(answers, min=0, max=args.num_answers - 1)
 
-        loss = criterion(outputs, answers)
-        loss.backward()
-        optimizer.step()
+        optimizer.zero_grad()
+
+        # 🔥 Tăng tốc với Mixed Precision (nếu bật `use_amp`)
+        with autocast("cuda", enabled=use_amp):
+            outputs = model(images, questions)
+            loss = criterion(outputs, answers)
+
+        # 🔥 Dùng scaler để tránh lỗi underflow với AMP
+        if use_amp:
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
 
         # Thống kê
         total_loss += loss.item()
@@ -105,6 +129,7 @@ def validate_model(model, val_loader, criterion, device):
                 questions.to(device),
                 answers.to(device),
             )
+            answers = torch.clamp(answers, min=0, max=args.num_answers - 1)
 
             outputs = model(images, questions)
             loss = criterion(outputs, answers)
@@ -119,6 +144,27 @@ def validate_model(model, val_loader, criterion, device):
     accuracy = total_correct / total_samples
 
     return avg_loss, accuracy
+
+
+# Thêm class EarlyStopping
+class EarlyStopping:
+    def __init__(self, patience=7, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.best_loss = None
+        self.early_stop = False
+
+    def __call__(self, val_loss):
+        if self.best_loss is None:
+            self.best_loss = val_loss
+        elif val_loss > self.best_loss - self.min_delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_loss = val_loss
+            self.counter = 0
 
 
 def train_model(args):
@@ -147,14 +193,38 @@ def train_model(args):
         model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
     )
 
+    # ✅ Sử dụng AMP để tăng tốc
+    scaler = GradScaler("cuda", enabled=args.use_amp)
+
+    # Thêm scheduler sau phần khởi tạo optimizer
+    scheduler = ReduceLROnPlateau(
+        optimizer, mode="max", factor=0.5, patience=3, verbose=True
+    )
+
+    # Thêm early stopping
+    early_stopping = EarlyStopping(patience=5)
+
     best_val_acc = 0.0
+
+    # ✅ Tăng tốc với `torch.compile()` nếu dùng GPU
+    if args.device == "cuda":
+        model = torch.compile(model)
 
     # ✅ Vòng lặp huấn luyện
     for epoch in range(args.num_epochs):
         train_loss, train_acc = train_one_epoch(
-            model, train_loader, criterion, optimizer, device
+            model, train_loader, criterion, optimizer, scaler, device, args.use_amp
         )
         val_loss, val_acc = validate_model(model, val_loader, criterion, device)
+
+        # Thêm dòng này
+        scheduler.step(val_acc)
+
+        # Thêm early stopping check
+        early_stopping(val_loss)
+        if early_stopping.early_stop:
+            print("Early stopping triggered")
+            break
 
         print(
             f"📌 Epoch {epoch+1}/{args.num_epochs} - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}"
