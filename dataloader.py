@@ -14,15 +14,20 @@ class VQADataset(Dataset):
             answers_file (str): Đường dẫn đến answers.pt
             indices_file (str): Đường dẫn đến file indices (train/val/test)
         """
-        self.images_file = images_file
-        self.questions_file = questions_file
-        self.answers_file = answers_file
+        # Load indices
         self.indices = torch.load(indices_file, map_location="cpu", weights_only=False)
 
-        # Không load toàn bộ dữ liệu ngay, chỉ kiểm tra kích thước
-        images_data = torch.load(images_file, map_location="cpu", weights_only=False)
-        self.num_images = images_data["images"].shape[0]
-        del images_data  # Giải phóng RAM
+        # Load questions và answers vào RAM (nhỏ, khoảng ~100MB mỗi file)
+        self.questions = torch.load(
+            questions_file, map_location="cpu", weights_only=False
+        )
+        self.answers = torch.load(answers_file, map_location="cpu", weights_only=False)
+
+        # Load images với mmap để tối ưu bộ nhớ
+        self.images_data = torch.load(
+            images_file, map_location="cpu", weights_only=False, mmap=True
+        )
+        self.images = self.images_data["images"]  # [8579, 3, 224, 224], memory-mapped
 
         # Load index_mapping
         mapping_file = os.path.join(os.path.dirname(images_file), "index_mapping.json")
@@ -30,14 +35,19 @@ class VQADataset(Dataset):
             raise FileNotFoundError(f"File {mapping_file} không tồn tại!")
         with open(mapping_file, "r", encoding="utf-8") as f:
             index_mapping = json.load(f)
-            self.image_to_qa = {
-                int(k): v["qa_indices"]
-                for k, v in index_mapping["image_indices"].items()
-            }
+            self.image_to_qa = {}
+            for qa_idx, qa_info in index_mapping["qa_indices"].items():
+                img_idx = qa_info["image_idx"]
+                if img_idx not in self.image_to_qa:
+                    self.image_to_qa[img_idx] = []
+                self.image_to_qa[img_idx].append(int(qa_idx))
 
-        # Kiểm tra
+        # Kiểm tra dữ liệu
+        print(f"Loaded images (mmap): {self.images.shape}")
+        print(f"Loaded questions: {self.questions.shape}")
+        print(f"Loaded answers: {self.answers.shape}")
         print(
-            f"Initialized dataset with {len(self.indices)} samples, max index: {self.indices.max().item()}"
+            f"Loaded indices from {indices_file}: {len(self.indices)} samples, max index: {self.indices.max().item()}"
         )
 
     def __len__(self):
@@ -48,33 +58,13 @@ class VQADataset(Dataset):
             idx = idx.tolist()
 
         if isinstance(idx, list):
-            images = []
-            questions = []
-            answers = []
-            for i in idx:
-                img_idx = self.indices[i].item()
-                # Load từng ảnh
-                images_data = torch.load(
-                    self.images_file, map_location="cpu", weights_only=False
-                )
-                image = images_data["images"][img_idx]
-                del images_data
-
-                # Load QA
-                qa_indices = self.image_to_qa[img_idx]
-                questions_data = torch.load(
-                    self.questions_file, map_location="cpu", weights_only=False
-                )
-                answers_data = torch.load(
-                    self.answers_file, map_location="cpu", weights_only=False
-                )
-                q = questions_data[qa_indices]
-                a = answers_data[qa_indices]
-                del questions_data, answers_data
-
-                images.append(image)
-                questions.append(q)
-                answers.append(a)
+            images = [self.images[i] for i in [self.indices[i].item() for i in idx]]
+            questions = [
+                self.questions[self.image_to_qa[self.indices[i].item()]] for i in idx
+            ]
+            answers = [
+                self.answers[self.image_to_qa[self.indices[i].item()]] for i in idx
+            ]
 
             # Padding để tạo tensor đồng nhất
             images = torch.stack(images)
@@ -87,34 +77,20 @@ class VQADataset(Dataset):
             return images, questions, answers
         else:
             img_idx = self.indices[idx].item()
-            images_data = torch.load(
-                self.images_file, map_location="cpu", weights_only=False
-            )
-            image = images_data["images"][img_idx]
-            del images_data
-
-            qa_indices = self.image_to_qa[img_idx]
-            questions_data = torch.load(
-                self.questions_file, map_location="cpu", weights_only=False
-            )
-            answers_data = torch.load(
-                self.answers_file, map_location="cpu", weights_only=False
-            )
-            questions = questions_data[qa_indices]
-            answers = answers_data[qa_indices]
-            del questions_data, answers_data
-
+            image = self.images[img_idx]
+            questions = self.questions[self.image_to_qa[img_idx]]
+            answers = self.answers[self.image_to_qa[img_idx]]
             return image, questions, answers
 
 
 def get_dataloader(
-    images_file, questions_file, answers_file, indices_file, batch_size=16, shuffle=True
+    images_file, questions_file, answers_file, indices_file, batch_size=32, shuffle=True
 ):
     dataset = VQADataset(images_file, questions_file, answers_file, indices_file)
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
 
-def get_all_dataloaders(data_dir, batch_size=16):
+def get_all_dataloaders(data_dir, batch_size=32):
     dataloaders = {
         "train": get_dataloader(
             os.path.join(data_dir, "images.pt"),
@@ -146,7 +122,7 @@ def get_all_dataloaders(data_dir, batch_size=16):
 
 if __name__ == "__main__":
     data_dir = "./processed"
-    dataloaders = get_all_dataloaders(data_dir, batch_size=16)
+    dataloaders = get_all_dataloaders(data_dir, batch_size=32)
     for phase in ["train", "val", "test"]:
         print(f"\nChecking {phase} dataloader:")
         for batch in dataloaders[phase]:
