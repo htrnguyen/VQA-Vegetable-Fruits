@@ -1,55 +1,55 @@
-# Loại bỏ thư mục data/raw và nội dung
-data/raw/*
-!data/raw/.gitkeep
+# Data directories
+raw/
+processed/
 
-# Loại bỏ thư mục data/processed/images và nội dung
-data/processed/
-
-# Loại bỏ các file dữ liệu lớn
-*.pth
-*.pt
-*.ckpt
-*.bin
-*.h5
-*.hdf5
-*.pkl
-*.pickle
-
-# Loại bỏ cache Python
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-.Python
 *.so
-
-# Loại bỏ môi trường ảo
-venv/
+.Python
 env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+
+# Environment
+.env
+.venv
+venv/
 ENV/
 
-# Loại bỏ file backup
-data/processed/backup.json
+# Model checkpoints and data files
+*.pt
+*.pth
+*.h5
+*.hdf5
+*.pkl
+*.json
 
-# Loại bỏ file logs
+# Logs
 *.log
 logs/
-
-# Loại bỏ file IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Loại bỏ file hệ thống
-.DS_Store
-Thumbs.db
-
-.vscode/*
-vizwiz/*
-__pycache__/modelArchitecture.cpython-311.pyc
-*.csv
-Saved_Models/*.pth
-*.pyc
-
-# Loại bỏ thư mục egg-info
-vqa_fruits.egg-info/
