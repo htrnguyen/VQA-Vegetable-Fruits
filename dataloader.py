@@ -55,55 +55,28 @@ class VQADataset(Dataset):
 
     def __getitem__(self, idx):
         """
+        Args:
+            idx: index của ảnh trong dataset
         Returns:
-            Với single index:
-                image: tensor [3, 224, 224]
-                questions: tensor [num_qa, max_q_len]
-                answers: tensor [num_qa, max_a_len]
-
-            Với batch:
-                images: tensor [batch_size * num_qa, 3, 224, 224]
-                questions: tensor [batch_size * num_qa, max_q_len]
-                answers: tensor [batch_size * num_qa, max_a_len]
+            image: tensor [3, 224, 224]
+            questions: tensor [num_qa, max_q_len]
+            answers: tensor [num_qa, max_a_len]
         """
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        if isinstance(idx, list):
-            # Xử lý batch
-            batch_images = []
-            batch_questions = []
-            batch_answers = []
+        # Lấy image_id từ indices
+        image_id = self.indices[idx].item()
 
-            for i in idx:
-                img_idx = self.indices[i].item()
-                image = self.images[img_idx]
-                qa_indices = self.image_to_qa[img_idx]
+        # Lấy ảnh trực tiếp từ image_id (không cần thông qua indices)
+        image = self.images[image_id]
 
-                # Lấy questions và answers cho ảnh này
-                questions = self.questions[qa_indices]
-                answers = self.answers[qa_indices]
+        # Lấy các Q&A tương ứng với ảnh
+        qa_indices = self.image_to_qa[image_id]
+        questions = self.questions[qa_indices]
+        answers = self.answers[qa_indices]
 
-                # Repeat ảnh cho mỗi cặp Q&A
-                num_qa = len(qa_indices)
-                batch_images.extend([image] * num_qa)
-                batch_questions.append(questions)
-                batch_answers.append(answers)
-
-            # Stack tất cả images và concatenate Q&A
-            batch_images = torch.stack(batch_images)
-            batch_questions = torch.cat(batch_questions)
-            batch_answers = torch.cat(batch_answers)
-
-            return batch_images, batch_questions, batch_answers
-        else:
-            # Xử lý single index
-            img_idx = self.indices[idx].item()
-            image = self.images[img_idx]
-            qa_indices = self.image_to_qa[img_idx]
-            questions = self.questions[qa_indices]
-            answers = self.answers[qa_indices]
-            return image, questions, answers
+        return image, questions, answers
 
     def get_original_qa(self, qa_idx):
         """Lấy câu hỏi và câu trả lời gốc từ qa_idx"""
