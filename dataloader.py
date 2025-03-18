@@ -17,13 +17,13 @@ class VQADataset(Dataset):
         # Load indices
         self.indices = torch.load(indices_file, map_location="cpu", weights_only=False)
 
-        # Load questions và answers vào RAM (nhỏ, khoảng ~100MB mỗi file)
+        # Load questions và answers vào RAM
         self.questions = torch.load(
             questions_file, map_location="cpu", weights_only=False
         )
         self.answers = torch.load(answers_file, map_location="cpu", weights_only=False)
 
-        # Load images với mmap để tối ưu bộ nhớ
+        # Load images với mmap
         self.images_data = torch.load(
             images_file, map_location="cpu", weights_only=False, mmap=True
         )
@@ -58,7 +58,7 @@ class VQADataset(Dataset):
             idx = idx.tolist()
 
         if isinstance(idx, list):
-            images = [self.images[i] for i in [self.indices[i].item() for i in idx]]
+            images = [self.images[self.indices[i].item()] for i in idx]
             questions = [
                 self.questions[self.image_to_qa[self.indices[i].item()]] for i in idx
             ]
