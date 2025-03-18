@@ -34,17 +34,14 @@ class VQADataset(Dataset):
             raise FileNotFoundError(f"File {mapping_file} không tồn tại!")
 
         with open(mapping_file, "r", encoding="utf-8") as f:
-            index_mapping = json.load(f)
+            self.index_mapping = json.load(f)  # Lưu toàn bộ index_mapping
             self.image_to_qa = {}
             # Convert string keys to integers
-            for qa_idx, qa_info in index_mapping["qa_indices"].items():
+            for qa_idx, qa_info in self.index_mapping["qa_indices"].items():
                 img_idx = int(qa_info["image_idx"])  # Convert to int
                 if img_idx not in self.image_to_qa:
                     self.image_to_qa[img_idx] = []
                 self.image_to_qa[img_idx].append(int(qa_idx))
-
-        # Store original mapping for visualization
-        self.qa_mapping = index_mapping["qa_indices"]
 
         # Kiểm tra dữ liệu
         print(f"Loaded images (mmap): {self.images.shape}")
