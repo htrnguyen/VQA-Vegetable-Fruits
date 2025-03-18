@@ -19,14 +19,18 @@ class VQADataset(Dataset):
         """
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
         # Load dữ liệu
-        images_data = torch.load(images_file, map_location=self.device)
+        images_data = torch.load(
+            images_file, map_location=self.device, weights_only=False
+        )
         self.images = images_data["images"]  # [8579, 3, 224, 224]
         self.questions = torch.load(
-            questions_file, map_location=self.device
+            questions_file, map_location=self.device, weights_only=False
         )  # [34316, 7]
-        self.answers = torch.load(answers_file, map_location=self.device)  # [34316, 3]
+        self.answers = torch.load(
+            answers_file, map_location=self.device, weights_only=False
+        )  # [34316, 3]
         self.indices = torch.load(
-            indices_file, map_location=self.device
+            indices_file, map_location=self.device, weights_only=False
         )  # train/val/test indices
 
         # Tạo ánh xạ từ image index sang QA indices
@@ -47,8 +51,8 @@ class VQADataset(Dataset):
         return len(self.indices)
 
     def __getitem__(self, idx):
-        # Lấy chỉ số ảnh
-        img_idx = self.indices[idx]
+        # Lấy chỉ số ảnh và chuyển từ tensor sang số nguyên
+        img_idx = self.indices[idx].item()  # Chuyển tensor sang int
         # Lấy ảnh
         image = self.images[img_idx]  # [3, 224, 224]
         # Lấy tất cả câu hỏi và đáp án tương ứng
