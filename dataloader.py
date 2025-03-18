@@ -68,8 +68,16 @@ class VQADataset(Dataset):
         # Lấy image_id từ indices
         image_id = self.indices[idx].item()
 
-        # Lấy ảnh trực tiếp từ image_id (không cần thông qua indices)
+        # Lấy đường dẫn ảnh gốc để kiểm tra
+        image_path = self.index_mapping["image_indices"][str(image_id)]
+        print(f"Loading image {image_id} from path: {image_path}")
+
+        # Lấy ảnh từ tensor
         image = self.images[image_id]
+
+        # Debug info
+        print(f"Image shape: {image.shape}")
+        print(f"Image min/max values: {image.min():.2f}/{image.max():.2f}")
 
         # Lấy các Q&A tương ứng với ảnh
         qa_indices = self.image_to_qa[image_id]

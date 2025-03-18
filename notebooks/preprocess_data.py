@@ -30,7 +30,7 @@ print(f"Data file: {data_file}")
 # ## Kiểm tra dữ liệu thô
 # 
 
-# In[2]:
+# In[13]:
 
 
 # Kiểm tra số lượng folder
@@ -52,7 +52,7 @@ for folder in folders:
 print(f"Tổng: {all_images} ảnh")
 
 
-# In[3]:
+# In[14]:
 
 
 # Kiểm tra số lượng câu hỏi và câu trả lời từ file JSON
@@ -83,7 +83,7 @@ print("Danh sách câu trả lời duy nhất:", list(answer_set)[:10])
 # # Tiền xử lý
 # 
 
-# In[4]:
+# In[2]:
 
 
 # Danh sách từ ghép cần giữ nguyên
@@ -186,7 +186,7 @@ special_phrases = ["không rõ", "bao nhiêu"]
 
 # ## Chuẩn hóa dữ liệu văn bản và tạo ánh xạ
 
-# In[5]:
+# In[3]:
 
 
 with open(data_file, "r", encoding="utf-8") as f:
@@ -229,7 +229,7 @@ print(f"Tổng số câu hỏi/đáp án: {len(index_mapping['qa_indices'])}")
 
 # ## Tiền xử lý ảnh
 
-# In[6]:
+# In[4]:
 
 
 image_transform = transforms.Compose(
@@ -280,7 +280,7 @@ print(f"Kích thước tensor ảnh: {images_tensor.shape}")
 
 # ## Tiền xử lý văn bản (giữ từ ghép)
 
-# In[7]:
+# In[6]:
 
 
 # Tokenizer
@@ -370,45 +370,70 @@ print(f"Đã lưu answers.pt: {answer_padded.shape}")
 
 # ## Chia dữ liệu train/val/test
 
-# In[8]:
+# In[12]:
 
 
 # Tạo danh sách chỉ số ảnh theo thư mục
-folder_to_indices = defaultdict(list)
+folder_to_images = defaultdict(list)
 for idx, image_id in index_mapping["image_indices"].items():
     folder = image_id.split("/")[0]
-    folder_to_indices[folder].append(int(idx))
+    folder_to_images[folder].append(int(idx))
 
 # Chia đều từng thư mục
-train_indices = []
-val_indices = []
-test_indices = []
+train_images = []
+val_images = []
+test_images = []
 
 print("Đang chia dữ liệu train/val/test...")
-for folder, indices in tqdm(folder_to_indices.items(), desc="Splitting folders"):
-    np.random.shuffle(indices)  # Xáo trộn ngẫu nhiên
-    n = len(indices)
+for folder, images in tqdm(folder_to_images.items(), desc="Splitting folders"):
+    n = len(images)
     train_n = int(0.8 * n)  # 80%
     val_n = int(0.1 * n)  # 10%
-    test_n = n - train_n - val_n  # 10% còn lại
 
-    train_indices.extend(indices[:train_n])
-    val_indices.extend(indices[train_n : train_n + val_n])
-    test_indices.extend(indices[train_n + val_n :])
+    # Đảm bảo ít nhất 1 ảnh cho val và test nếu folder có >= 10 ảnh
+    if n >= 10:
+        if val_n == 0:
+            val_n = 1
+            train_n = n - 2  # Giảm train để có 1 ảnh cho test
 
-# Sắp xếp lại để đảm bảo thứ tự
-train_indices.sort()
-val_indices.sort()
-test_indices.sort()
+    # Chia images
+    folder_train = images[:train_n]
+    folder_val = images[train_n : train_n + val_n]
+    folder_test = images[train_n + val_n :]
 
-# Lưu chỉ số
-torch.save(torch.tensor(train_indices), os.path.join(processed_dir, "train_indices.pt"))
-torch.save(torch.tensor(val_indices), os.path.join(processed_dir, "val_indices.pt"))
-torch.save(torch.tensor(test_indices), os.path.join(processed_dir, "test_indices.pt"))
+    # Thêm vào danh sách chung
+    train_images.extend(folder_train)
+    val_images.extend(folder_val)
+    test_images.extend(folder_test)
 
-print(f"Train indices: {len(train_indices)} ảnh")
-print(f"Val indices: {len(val_indices)} ảnh")
-print(f"Test indices: {len(test_indices)} ảnh")
+# In thống kê chi tiết
+print("\nThống kê chi tiết:")
+for folder, images in folder_to_images.items():
+    train_count = sum(1 for img in train_images if img in images)
+    val_count = sum(1 for img in val_images if img in images)
+    test_count = sum(1 for img in test_images if img in images)
+    print(
+        f"{folder}: Tổng {len(images)} ảnh - Train: {train_count}, Val: {val_count}, Test: {test_count}"
+    )
+
+# Kiểm tra tổng số Q&A
+total_train_qa = len(train_images) * 4
+total_val_qa = len(val_images) * 4
+total_test_qa = len(test_images) * 4
+
+print(f"\nTổng kết:")
+print(f"Train: {len(train_images)} ảnh ({total_train_qa} Q&A)")
+print(f"Val: {len(val_images)} ảnh ({total_val_qa} Q&A)")
+print(f"Test: {len(test_images)} ảnh ({total_test_qa} Q&A)")
+print(f"Tổng: {len(train_images) + len(val_images) + len(test_images)} ảnh")
+print(f"Tổng Q&A: {total_train_qa + total_val_qa + total_test_qa} cặp")
+
+# Lưu chỉ số ảnh
+torch.save(torch.tensor(train_images), os.path.join(processed_dir, "train_indices.pt"))
+torch.save(torch.tensor(val_images), os.path.join(processed_dir, "val_indices.pt"))
+torch.save(torch.tensor(test_images), os.path.join(processed_dir, "test_indices.pt"))
+
+print(f"Lưu chỉ số ảnh thành công!")
 
 
 # ## Kiểm tra dữ liệu đã xử lý
