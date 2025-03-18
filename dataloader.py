@@ -31,39 +31,59 @@ class VQADataset(Dataset):
             indices_file, map_location="cpu", weights_only=False
         )  # train/val/test indices
 
-        # Kiểm tra số lượng indices
+        # Kiểm tra dữ liệu
+        print(f"Loaded images: {self.images.shape}")
+        print(f"Loaded questions: {self.questions.shape}")
+        print(f"Loaded answers: {self.answers.shape}")
         print(
             f"Loaded indices from {indices_file}: {len(self.indices)} samples, max index: {self.indices.max().item()}"
         )
 
         # Tạo ánh xạ từ image index sang QA indices
         self.image_to_qa = {}
-        with open(
-            os.path.join(os.path.dirname(images_file), "index_mapping.json"),
-            "r",
-            encoding="utf-8",
-        ) as f:
+        mapping_file = os.path.join(os.path.dirname(images_file), "index_mapping.json")
+        if not os.path.exists(mapping_file):
+            raise FileNotFoundError(f"File {mapping_file} không tồn tại!")
+        with open(mapping_file, "r", encoding="utf-8") as f:
             index_mapping = json.load(f)
             for qa_idx, qa_info in index_mapping["qa_indices"].items():
                 img_idx = qa_info["image_idx"]
+                if img_idx >= len(self.images):
+                    raise ValueError(
+                        f"Image index {img_idx} vượt quá kích thước images ({len(self.images)})"
+                    )
                 if img_idx not in self.image_to_qa:
                     self.image_to_qa[img_idx] = []
                 self.image_to_qa[img_idx].append(int(qa_idx))
+
+        # Kiểm tra tính hợp lệ của indices
+        for idx in self.indices:
+            if idx.item() not in self.image_to_qa:
+                raise ValueError(
+                    f"Index {idx.item()} trong {indices_file} không có trong index_mapping.json!"
+                )
 
     def __len__(self):
         return len(self.indices)
 
     def __getitem__(self, idx):
-        # Lấy chỉ số ảnh và chuyển từ tensor sang số nguyên
-        img_idx = self.indices[idx].item()  # idx là chỉ số trong batch
-        # Lấy ảnh
-        image = self.images[img_idx]  # [3, 224, 224]
-        # Lấy tất cả câu hỏi và đáp án tương ứng
-        qa_indices = self.image_to_qa[img_idx]  # Danh sách các QA indices
-        questions = self.questions[qa_indices]  # [num_questions, 7]
-        answers = self.answers[qa_indices]  # [num_questions, 3]
-
-        return image, questions, answers
+        # idx có thể là tensor batch từ DataLoader
+        if torch.is_tensor(idx):
+            idx = idx.tolist()  # Chuyển tensor thành list nếu là batch
+        if isinstance(idx, list):
+            # Xử lý batch
+            images = [self.images[i] for i in idx]
+            questions = [self.questions[self.image_to_qa[i]] for i in idx]
+            answers = [self.answers[self.image_to_qa[i]] for i in idx]
+            return torch.stack(images), questions, answers
+        else:
+            # Xử lý mẫu đơn
+            img_idx = self.indices[idx].item()
+            image = self.images[img_idx]  # [3, 224, 224]
+            qa_indices = self.image_to_qa[img_idx]  # Danh sách các QA indices
+            questions = self.questions[qa_indices]  # [num_questions, 7]
+            answers = self.answers[qa_indices]  # [num_questions, 3]
+            return image, questions, answers
 
 
 def get_dataloader(
@@ -145,6 +165,6 @@ if __name__ == "__main__":
         for batch in dataloaders[phase]:
             images, questions, answers = batch
             print(f"Images shape: {images.shape}")
-            print(f"Questions shape: {questions.shape}")
-            print(f"Answers shape: {answers.shape}")
+            print(f"Questions shape: {len(questions)} items")  # questions là list
+            print(f"Answers shape: {len(answers)} items")  # answers là list
             break
