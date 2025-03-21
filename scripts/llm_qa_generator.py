@@ -15,9 +15,21 @@ os.makedirs(PROCESSED_DIR, exist_ok=True)
 
 # === Cấu hình API ===
 API_KEYS = [
-    "Your API Key 1",
-    "Your API Key 2",
-    "Your API Key 3",
+    "AIzaSyDj77brKVyn1BYG4kWOL9vKde6Y2KKwwDg",  # 15
+    "AIzaSyCLkZQmuTLXRRTAkz4GNGFCgywbXt_wf6I",  # 1
+    "AIzaSyDEgXyz7CFRLenfQRGqtSKU_lmqqeEa0gI",  # 2
+    "AIzaSyChW-temSy4majO1iOKyfRZxEVE55tFGVU",  # 3
+    "AIzaSyAG-JTDBhBjGjIQRhbAA7qinimG-MFZBLw",  # 4
+    "AIzaSyBEIzqoukZX4bvf2l4mJvR41S0LIr5PUTk",  # 5
+    "AIzaSyB5X3IrxXYkEKnfcpftFSu-ILfZq-lpqeo",  # 6
+    "AIzaSyAI8cCuWhMVOJwFDB_8Z884osX8guVvB4w",  # 7
+    "AIzaSyC0H_rgV2jbNiiPdvxEfy6rMIgbFW-NsoI",  # 8
+    "AIzaSyD3MfFixZP9NYsiBZ5BMRWANtPR71GQLME",  # 9
+    "AIzaSyAlfwuWZO6u8JO5_EZsE2dtAtg2KIdLZQw",  # 10
+    "AIzaSyAwYPL9pEsQOzvKmZiHa2qk3QZZgNkNokQ",  # 11
+    "AIzaSyA7w3_6vGJ5aBlPmzJLoXN7ATG8SJJkjy4",  # 12
+    "AIzaSyCBS4jvnwHKbNHCoA81fIiRN3L89BHLlAk",  # 13
+    "AIzaSyDnQAL0Zqm4ALJfr8efL2v144PRBcFqoPM",  # 14
 ]
 CURRENT_API_KEY_INDEX = 0
 MAX_RETRIES = len(API_KEYS)
