@@ -1,6 +1,6 @@
 # Data directories
-raw/
 processed/
+raw/
 
 # Python
 __pycache__/
